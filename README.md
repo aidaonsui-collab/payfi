@@ -1,8 +1,8 @@
-# ArcFi
+# PayFi
 
 Send USDC from an Arc wallet to the Ethereum address SoFi shows for a USDC deposit.
 
-SoFi credits USDC that arrives on Ethereum. ArcFi uses Circle Bridge Kit: the wallet burns USDC on Arc, and Circle mints Ethereum USDC at the pasted address. The deposit lands in SoFi Crypto.
+SoFi credits USDC that arrives on Ethereum. PayFi uses Circle Bridge Kit: the wallet burns USDC on Arc, and Circle mints Ethereum USDC at the pasted address. The deposit lands in SoFi Crypto.
 
 ```
 npm install

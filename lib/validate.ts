@@ -20,6 +20,6 @@ export function amountError(raw: string): string | null {
   if (!/^\d+(\.\d{1,6})?$/.test(value)) return 'Enter a USDC amount with up to 6 decimals.'
   const n = Number(value)
   if (!(n > 0)) return 'Enter an amount greater than 0.'
-  if (n > 25_000) return 'ArcFi sends at most 25,000 USDC at a time.'
+  if (n > 25_000) return 'PayFi sends at most 25,000 USDC at a time.'
   return null
 }

@@ -4,7 +4,7 @@ export default function HomePage() {
   return (
     <main>
       <div className="kicker">ARC → ETHEREUM USDC</div>
-      <h1>ArcFi</h1>
+      <h1>PayFi</h1>
       <p>
         Move USDC from Arc into the Ethereum address SoFi gives you. Circle burns it on Arc and
         mints Ethereum USDC there. SoFi credits that deposit in SoFi Crypto.

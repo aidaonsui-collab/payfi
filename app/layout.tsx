@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'ArcFi',
+  title: 'PayFi',
   description: 'Send Arc USDC to a SoFi Ethereum USDC address.',
 }
 

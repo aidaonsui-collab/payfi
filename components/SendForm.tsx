@@ -20,7 +20,7 @@ export function SendForm() {
     setError('')
     const provider = injectedProvider()
     if (!provider) {
-      setError('Open ArcFi in a browser with a wallet extension.')
+      setError('Open PayFi in a browser with a wallet extension.')
       return
     }
     setBusy(true)
