@@ -14,9 +14,12 @@
   "dependencies": {
     "@circle-fin/adapter-viem-v2": "^1.18.0",
     "@circle-fin/bridge-kit": "^1.15.1",
+    "@tailwindcss/postcss": "^4.3.3",
+    "lucide-react": "^1.48.0",
     "next": "^15.5.26",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3",
     "viem": "^2.56.9"
   },
   "devDependencies": {
