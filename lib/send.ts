@@ -13,6 +13,7 @@ export type SendStep = {
   state: string
   explorerUrl?: string
   txHash?: string
+  errorCategory?: string
 }
 
 export type SendOutcome = {
@@ -28,6 +29,22 @@ function burnTxHash(payload: unknown): string | null {
   const step = values as { state?: unknown; txHash?: unknown }
   if (step.state === 'success' && typeof step.txHash === 'string' && step.txHash) return step.txHash
   return null
+}
+
+// Bridge Kit tags a burn with these when it reverted on Arc or never made it
+// on-chain, so no USDC left the wallet even though the step has a hash.
+const BURN_FAILED = new Set(['chain_revert', 'reverted_onchain', 'partial_reverted', 'failed_offchain'])
+
+/**
+ * The Arc burn hash to record as sent. A burn that failed on-chain returns
+ * null. Any other error after submission keeps its hash: that burn may
+ * still land, and the deposit check settles it.
+ */
+export function sentBurnTxHash(steps: SendStep[]): string | null {
+  const burn = steps.find((step) => step.name === 'burn' && step.txHash)
+  if (!burn?.txHash) return null
+  if (burn.state === 'error' && burn.errorCategory && BURN_FAILED.has(burn.errorCategory)) return null
+  return burn.txHash
 }
 
 export async function sendArcUsdcToSofi(opts: {
@@ -90,6 +107,7 @@ export async function sendArcUsdcToSofi(opts: {
       state: step.state,
       explorerUrl: step.explorerUrl,
       txHash: step.txHash,
+      errorCategory: step.errorCategory,
     })),
   }
 }

@@ -14,8 +14,10 @@ import {
 } from 'lucide-react'
 import type { Address } from 'viem'
 import { Mark } from '@/components/Mark'
+import { ARC_EXPLORER } from '@/lib/chains'
 import {
   addUsdc,
+  addressGroups,
   dayLabel,
   formatExact,
   formatMoney,
@@ -25,8 +27,15 @@ import {
   shortAddress,
   toUnits,
 } from '@/lib/format'
-import { depositLabel, loadReceipts, saveReceipts, type Receipt } from '@/lib/receipts'
-import { sendArcUsdcToSofi } from '@/lib/send'
+import {
+  depositLabel,
+  lastDepositAddress,
+  loadReceipts,
+  saveReceipts,
+  type DepositStatus,
+  type Receipt,
+} from '@/lib/receipts'
+import { sendArcUsdcToSofi, sentBurnTxHash } from '@/lib/send'
 import { amountError, sofiAddressError } from '@/lib/validate'
 import { arcUsdcBalance, connectArc, injectedProvider } from '@/lib/wallet'
 
@@ -49,6 +58,8 @@ const PATH = [
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'back'] as const
 
+const TX_HASH = /^0x[0-9a-fA-F]{64}$/
+
 export function PayApp() {
   const [view, setView] = useState<View>('home')
   const [step, setStep] = useState<Step>('amount')
@@ -65,13 +76,14 @@ export function PayApp() {
     setReceipts(loadReceipts())
   }, [])
 
-  const pendingIds = receipts
-    .filter((item) => item.status === 'pending' && /^0x[0-9a-fA-F]{64}$/.test(item.id))
+  // Failed rows are rechecked too, so a later Circle forward still flips them to deposited.
+  const undeliveredIds = receipts
+    .filter((item) => item.status !== 'deposited' && TX_HASH.test(item.id))
     .map((item) => item.id)
     .join(',')
 
   useEffect(() => {
-    const ids = pendingIds.split(',').filter(Boolean)
+    const ids = undeliveredIds.split(',').filter(Boolean)
     if (ids.length === 0) return
     let cancelled = false
     async function look() {
@@ -79,14 +91,17 @@ export function PayApp() {
         try {
           const response = await fetch(`/api/deposit?tx=${id}`)
           const data = (await response.json()) as { status?: string }
-          if (cancelled || data.status !== 'deposited') continue
+          const status: DepositStatus | null =
+            data.status === 'deposited' || data.status === 'failed' ? data.status : null
+          if (cancelled || !status) continue
           setReceipts((current) => {
-            const next = current.map((item) => (item.id === id ? { ...item, status: 'deposited' as const } : item))
+            if (!current.some((item) => item.id === id && item.status !== status)) return current
+            const next = current.map((item) => (item.id === id ? { ...item, status } : item))
             saveReceipts(next)
             return next
           })
         } catch {
-          // Keep the row pending until Circle reports the deposit.
+          // Keep the row as it is until Circle reports a change.
         }
       }
     }
@@ -96,7 +111,7 @@ export function PayApp() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [pendingIds])
+  }, [undeliveredIds])
 
   useEffect(() => {
     if (step !== 'sent' || view !== 'move') return
@@ -116,9 +131,16 @@ export function PayApp() {
     })
     setStep('sent')
     setBusy(false)
+    // Each move needs its own address check.
+    setAttested(false)
     if (account) {
       arcUsdcBalance(account).then(setBalance).catch(() => undefined)
     }
+  }
+
+  function changeRecipient(value: string) {
+    if (value !== recipient) setAttested(false)
+    setRecipient(value)
   }
 
   function markDeposited(id: string) {
@@ -231,12 +253,13 @@ export function PayApp() {
             balance={balance}
             amount={amount}
             recipient={recipient}
+            lastAddress={lastDepositAddress(receipts)}
             attested={attested}
             step={step}
             busy={busy}
             error={error}
             onAmount={setAmount}
-            onRecipient={setRecipient}
+            onRecipient={changeRecipient}
             onAttested={setAttested}
             onStep={setStep}
             onHome={() => setView('home')}
@@ -416,13 +439,36 @@ function Activity({ receipts, onMove }: { receipts: Receipt[]; onMove: () => voi
                         <span className="mt-0.5 block truncate font-mono text-sm text-muted">
                           {shortAddress(item.recipient)}
                         </span>
-                        <span className={`mt-1 block text-sm ${item.status === 'deposited' ? 'text-accent' : 'text-muted'}`}>
+                        <span
+                          className={`mt-1 block text-sm ${
+                            item.status === 'deposited' ? 'text-accent' : item.status === 'failed' ? 'text-bad' : 'text-muted'
+                          }`}
+                        >
                           {depositLabel(item.status)}
                         </span>
                         <span className="mt-0.5 block text-xs text-faint">{formatWhen(item.at)}</span>
                       </span>
                       <span className="num shrink-0 text-sm font-medium text-ink">−{formatMoney(item.amount)}</span>
                     </div>
+                    {item.status === 'failed' ? (
+                      <p className="mt-2 text-sm leading-relaxed text-muted">
+                        Circle burned this USDC on Arc but could not mint it on Ethereum. It is not lost: the mint to
+                        your SoFi address can still be completed from the Arc transaction.
+                        {TX_HASH.test(item.id) ? (
+                          <>
+                            {' '}
+                            <a
+                              href={`${ARC_EXPLORER}/tx/${item.id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-medium text-accent underline"
+                            >
+                              View it on Arc
+                            </a>
+                          </>
+                        ) : null}
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -497,6 +543,7 @@ function Move(props: {
   balance: string | null
   amount: string
   recipient: string
+  lastAddress: string | null
   attested: boolean
   step: Step
   busy: boolean
@@ -522,6 +569,11 @@ function Move(props: {
     : amountError(props.amount) ||
       (toUnits(props.amount) > toUnits(balanceValue) ? 'That is more than the Arc balance.' : null)
   const destination = sofiAddressError(props.recipient)
+  // The last SoFi address when this one differs from it, to warn about a swapped paste.
+  const changedFrom =
+    !destination && props.lastAddress && props.lastAddress.toLowerCase() !== props.recipient.trim().toLowerCase()
+      ? props.lastAddress
+      : null
   const title =
     props.step === 'amount'
       ? 'Amount'
@@ -628,7 +680,7 @@ function Move(props: {
           props.onArcSent(receiptFor(txHash))
         },
       })
-      const burned = arcTx ?? result.steps.find((step) => step.name === 'burn' && step.txHash)?.txHash ?? null
+      const burned = arcTx ?? sentBurnTxHash(result.steps)
       if (burned && !arcTx) props.onArcSent(receiptFor(burned))
       if (burned && result.state === 'success') {
         props.onDeposited(burned)
@@ -708,6 +760,7 @@ function Move(props: {
             recipient={props.recipient}
             attested={props.attested}
             destination={destination}
+            changedFrom={changedFrom}
             tried={tried}
             onRecipient={(value) => {
               props.onRecipient(value)
@@ -726,10 +779,21 @@ function Move(props: {
             <dl className="panel divide-y divide-line">
               <Row label="To" value="SoFi Crypto" />
               <Row label="Network" value="Ethereum" />
-              <Row label="Address" value={shortAddress(props.recipient)} mono />
+              <div className="px-4 py-3">
+                <dt className="text-sm text-muted">SoFi address</dt>
+                <dd className="mt-2">
+                  <div className="grid grid-cols-[repeat(5,max-content)] gap-x-2 gap-y-1 font-mono text-base text-ink">
+                    {addressGroups(props.recipient).map((group, i) => (
+                      <span key={i}>{group}</span>
+                    ))}
+                  </div>
+                  <div className="mt-2 text-xs text-muted">Check every group against the address in SoFi.</div>
+                </dd>
+              </div>
               <Row label="Bridge fee" value={fee ? `$${formatExact(fee)}` : feeState === 'failed' ? 'Unavailable' : 'Quoting Circle…'} />
               <Row label="You pay" value={paid ? `${formatExact(paid)} USDC` : '—'} />
             </dl>
+            {changedFrom ? <NewAddressNote last={changedFrom} /> : null}
             <p className="px-1 text-sm leading-relaxed text-muted">
               Circle burns what you pay on Arc and mints the amount above on Ethereum. The bridge fee is the
               difference, taken out on Ethereum. A wrong address cannot be reversed.
@@ -790,6 +854,7 @@ function Address({
   recipient,
   attested,
   destination,
+  changedFrom,
   tried,
   onRecipient,
   onAttest,
@@ -797,6 +862,7 @@ function Address({
   recipient: string
   attested: boolean
   destination: string | null
+  changedFrom: string | null
   tried: boolean
   onRecipient: (value: string) => void
   onAttest: (value: boolean) => void
@@ -840,6 +906,7 @@ function Address({
           Ethereum
         </span>
       </div>
+      {changedFrom ? <NewAddressNote last={changedFrom} /> : null}
       <button
         type="button"
         role="checkbox"
@@ -866,11 +933,20 @@ function Address({
   )
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function NewAddressNote({ last }: { last: string }) {
+  return (
+    <p className="text-sm leading-relaxed text-bad">
+      This is not the address your last SoFi deposit went to (<span className="font-mono">{shortAddress(last)}</span>).
+      Check it against SoFi before you send.
+    </p>
+  )
+}
+
+function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">
       <dt className="text-sm text-muted">{label}</dt>
-      <dd className={`text-right text-sm font-medium text-ink ${mono ? 'font-mono' : ''}`}>{value}</dd>
+      <dd className="text-right text-sm font-medium text-ink">{value}</dd>
     </div>
   )
 }
