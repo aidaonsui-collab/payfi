@@ -65,6 +65,39 @@ export function PayApp() {
     setReceipts(loadReceipts())
   }, [])
 
+  const pendingIds = receipts
+    .filter((item) => item.status === 'pending' && /^0x[0-9a-fA-F]{64}$/.test(item.id))
+    .map((item) => item.id)
+    .join(',')
+
+  useEffect(() => {
+    const ids = pendingIds.split(',').filter(Boolean)
+    if (ids.length === 0) return
+    let cancelled = false
+    async function look() {
+      for (const id of ids) {
+        try {
+          const response = await fetch(`/api/deposit?tx=${id}`)
+          const data = (await response.json()) as { status?: string }
+          if (cancelled || data.status !== 'deposited') continue
+          setReceipts((current) => {
+            const next = current.map((item) => (item.id === id ? { ...item, status: 'deposited' as const } : item))
+            saveReceipts(next)
+            return next
+          })
+        } catch {
+          // Keep the row pending until Circle reports the deposit.
+        }
+      }
+    }
+    void look()
+    const timer = window.setInterval(() => void look(), 10_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [pendingIds])
+
   useEffect(() => {
     if (step !== 'sent' || view !== 'move') return
     const id = window.setTimeout(() => {
