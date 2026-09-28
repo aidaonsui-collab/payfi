@@ -21,11 +21,21 @@ export type SendOutcome = {
   steps: SendStep[]
 }
 
+function burnTxHash(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object' || !('values' in payload)) return null
+  const values = (payload as { values?: unknown }).values
+  if (!values || typeof values !== 'object') return null
+  const step = values as { state?: unknown; txHash?: unknown }
+  if (step.state === 'success' && typeof step.txHash === 'string' && step.txHash) return step.txHash
+  return null
+}
+
 export async function sendArcUsdcToSofi(opts: {
   provider: Eip1193
   recipient: string
   amount: string
   fee: string
+  onArcSent?: (txHash: string) => void
 }): Promise<SendOutcome> {
   const addressError = sofiAddressError(opts.recipient)
   if (addressError) throw new Error(addressError)
@@ -60,6 +70,14 @@ export async function sendArcUsdcToSofi(opts: {
     },
   }
   const estimate = await kit.estimate(params)
+  let noted = false
+  kit.on('burn', (payload) => {
+    if (noted) return
+    const txHash = burnTxHash(payload)
+    if (!txHash) return
+    noted = true
+    opts.onArcSent?.(txHash)
+  })
   const result = await kit.bridge({
     ...params,
     ...(estimate.quote !== undefined ? { quote: estimate.quote } : {}),

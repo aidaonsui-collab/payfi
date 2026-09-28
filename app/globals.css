@@ -70,7 +70,35 @@
   }
 }
 
+.check-ring,
+.check-mark {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.check-ring {
+  stroke-width: 2;
+  stroke-dasharray: 151;
+  stroke-dashoffset: 151;
+  animation: check-ring 520ms ease forwards;
+}
+.check-mark {
+  stroke-width: 3.5;
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: check-mark 380ms 420ms ease forwards;
+}
+
+@keyframes check-ring {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes check-mark {
+  to { stroke-dashoffset: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .press { transition: none; }
   .press:active:not(:disabled) { transform: none; }
+  .check-ring, .check-mark { animation: none; stroke-dashoffset: 0; }
 }

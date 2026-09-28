@@ -25,13 +25,13 @@ import {
   shortAddress,
   toUnits,
 } from '@/lib/format'
-import { loadReceipts, saveReceipts, type Receipt } from '@/lib/receipts'
-import { sendArcUsdcToSofi, type SendStep } from '@/lib/send'
+import { depositLabel, loadReceipts, saveReceipts, type Receipt } from '@/lib/receipts'
+import { sendArcUsdcToSofi } from '@/lib/send'
 import { amountError, sofiAddressError } from '@/lib/validate'
 import { arcUsdcBalance, connectArc, injectedProvider } from '@/lib/wallet'
 
 type View = 'home' | 'move' | 'activity' | 'guide'
-type Step = 'amount' | 'address' | 'review' | 'sending' | 'done'
+type Step = 'amount' | 'address' | 'review' | 'sending' | 'sent'
 
 const NAV: { id: View; label: string; icon: typeof House }[] = [
   { id: 'home', label: 'Home', icon: House },
@@ -58,13 +58,46 @@ export function PayApp() {
   const [recipient, setRecipient] = useState('')
   const [attested, setAttested] = useState(false)
   const [receipts, setReceipts] = useState<Receipt[]>([])
-  const [last, setLast] = useState<Receipt | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     setReceipts(loadReceipts())
   }, [])
+
+  useEffect(() => {
+    if (step !== 'sent' || view !== 'move') return
+    const id = window.setTimeout(() => {
+      setView('activity')
+      setStep('amount')
+      setAmount('')
+    }, 1500)
+    return () => window.clearTimeout(id)
+  }, [step, view])
+
+  function remember(receipt: Receipt) {
+    setReceipts((current) => {
+      const next = [receipt, ...current.filter((item) => item.id !== receipt.id)]
+      saveReceipts(next)
+      return next
+    })
+    setStep('sent')
+    setBusy(false)
+    if (account) {
+      arcUsdcBalance(account).then(setBalance).catch(() => undefined)
+    }
+  }
+
+  function markDeposited(id: string) {
+    setReceipts((current) => {
+      const next = current.map((item) => (item.id === id ? { ...item, status: 'deposited' as const } : item))
+      saveReceipts(next)
+      return next
+    })
+    if (account) {
+      arcUsdcBalance(account).then(setBalance).catch(() => undefined)
+    }
+  }
 
   function openMove() {
     setError('')
@@ -125,7 +158,7 @@ export function PayApp() {
         </p>
       </aside>
 
-      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:mx-auto md:max-w-xl">
+      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:mx-auto md:max-w-xl md:pb-0">
         {view !== 'move' ? (
           <div className="hidden items-center gap-2 border-b border-line px-10 py-4 md:flex">
             <p className="text-sm text-muted">USDC from Arc into the Ethereum address SoFi gives you.</p>
@@ -169,7 +202,6 @@ export function PayApp() {
             step={step}
             busy={busy}
             error={error}
-            last={last}
             onAmount={setAmount}
             onRecipient={setRecipient}
             onAttested={setAttested}
@@ -177,21 +209,14 @@ export function PayApp() {
             onHome={() => setView('home')}
             onActivity={() => setView('activity')}
             onConnect={connect}
-            onSent={(receipt, nextBalance) => {
-              const next = [receipt, ...receipts]
-              setReceipts(next)
-              saveReceipts(next)
-              setLast(receipt)
-              setBalance(nextBalance)
-              setStep('done')
-            }}
+            onArcSent={remember}
+            onDeposited={markDeposited}
             onError={setError}
             onBusy={setBusy}
           />
         ) : null}
 
-        {view !== 'move' ? (
-          <nav className="safe-b grid shrink-0 grid-cols-4 border-t border-line bg-card md:hidden" aria-label="Primary">
+        <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line bg-card pb-[max(0.35rem,env(safe-area-inset-bottom))] md:hidden" aria-label="Primary">
             {NAV.map((item) => {
               const active = view === item.id
               const Icon = item.icon
@@ -210,7 +235,6 @@ export function PayApp() {
               )
             })}
           </nav>
-        ) : null}
       </div>
     </div>
   )
@@ -299,9 +323,9 @@ function Home({
             {recent.map((item) => (
               <li key={item.id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <span className="min-w-0">
-                  <span className="block text-sm font-medium text-ink">To SoFi</span>
+                  <span className="block text-sm font-medium text-ink">Sent</span>
                   <span className="mt-0.5 block truncate text-sm text-muted">
-                    {shortAddress(item.recipient)} · {formatWhen(item.at)}
+                    {depositLabel(item.status)} · {formatWhen(item.at)}
                   </span>
                 </span>
                 <span className="num shrink-0 text-sm font-medium text-ink">−{formatMoney(item.amount)}</span>
@@ -330,12 +354,12 @@ function Activity({ receipts, onMove }: { receipts: Receipt[]; onMove: () => voi
   return (
     <div className="safe-x pb-6 pt-4 md:px-10 md:pt-10">
       <h1 className="pt-2 text-2xl font-medium tracking-tight text-ink">Activity</h1>
-      <p className="mt-1 text-sm text-muted">Receipts stay on this device.</p>
+      <p className="mt-1 text-sm text-muted">Saved in this browser only.</p>
       {receipts.length === 0 ? (
         <div className="panel mt-6 px-4 py-8 text-center">
           <p className="text-base font-medium text-ink">No moves yet</p>
           <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-muted">
-            A finished send to SoFi shows the amount, address, and explorer links here.
+            A send shows up here as soon as it leaves your Arc wallet.
           </p>
           <button
             type="button"
@@ -355,23 +379,17 @@ function Activity({ receipts, onMove }: { receipts: Receipt[]; onMove: () => voi
                   <li key={item.id} className="px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
                       <span className="min-w-0">
-                        <span className="block text-sm font-medium text-ink">To SoFi</span>
+                        <span className="block text-sm font-medium text-ink">Sent</span>
                         <span className="mt-0.5 block truncate font-mono text-sm text-muted">
                           {shortAddress(item.recipient)}
+                        </span>
+                        <span className={`mt-1 block text-sm ${item.status === 'deposited' ? 'text-accent' : 'text-muted'}`}>
+                          {depositLabel(item.status)}
                         </span>
                         <span className="mt-0.5 block text-xs text-faint">{formatWhen(item.at)}</span>
                       </span>
                       <span className="num shrink-0 text-sm font-medium text-ink">−{formatMoney(item.amount)}</span>
                     </div>
-                    {item.links.length > 0 ? (
-                      <p className="mt-2 flex flex-wrap gap-3 text-xs">
-                        {item.links.map((link) => (
-                          <a key={link.url} className="font-medium text-accent" href={link.url} target="_blank" rel="noreferrer">
-                            {link.name}
-                          </a>
-                        ))}
-                      </p>
-                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -450,7 +468,6 @@ function Move(props: {
   step: Step
   busy: boolean
   error: string
-  last: Receipt | null
   onAmount: (value: string) => void
   onRecipient: (value: string) => void
   onAttested: (value: boolean) => void
@@ -458,7 +475,8 @@ function Move(props: {
   onHome: () => void
   onActivity: () => void
   onConnect: () => void
-  onSent: (receipt: Receipt, balance: string) => void
+  onArcSent: (receipt: Receipt) => void
+  onDeposited: (id: string) => void
   onError: (message: string) => void
   onBusy: (value: boolean) => void
 }) {
@@ -479,8 +497,8 @@ function Move(props: {
         : props.step === 'review'
           ? 'Review'
           : props.step === 'sending'
-            ? 'Settling'
-            : 'Receipt'
+            ? 'Sending'
+            : 'Sent'
   const index = props.step === 'amount' ? '1' : props.step === 'address' ? '2' : props.step === 'review' ? '3' : ''
 
   const paid = fee ? addUsdc(props.amount, fee) : null
@@ -517,9 +535,10 @@ function Move(props: {
   }, [props.step, props.amount])
 
   function goBack() {
+    if (props.step === 'sending') return
     if (props.step === 'address') props.onStep('amount')
     else if (props.step === 'review') props.onStep('address')
-    else if (props.step !== 'sending') props.onHome()
+    else props.onHome()
   }
 
   async function onContinue() {
@@ -542,6 +561,7 @@ function Move(props: {
     }
     props.onError('')
     props.onBusy(true)
+    let arcTx: string | null = null
     try {
       const fresh = await loadBridgeFee(props.amount)
       if (!fresh) {
@@ -556,32 +576,40 @@ function Move(props: {
         return
       }
       props.onStep('sending')
+      const receiptFor = (txHash: string): Receipt => ({
+        id: txHash,
+        amount: props.amount,
+        fee,
+        recipient: props.recipient.trim(),
+        at: Date.now(),
+        status: 'pending',
+        links: [],
+      })
       const result = await sendArcUsdcToSofi({
         provider,
         recipient: props.recipient,
         amount: props.amount,
         fee,
+        onArcSent: (txHash) => {
+          arcTx = txHash
+          props.onArcSent(receiptFor(txHash))
+        },
       })
-      if (result.state !== 'success') {
-        props.onStep('review')
-        props.onError(`The bridge ended in ${result.state}.`)
+      const burned = arcTx ?? result.steps.find((step) => step.name === 'burn' && step.txHash)?.txHash ?? null
+      if (burned && !arcTx) props.onArcSent(receiptFor(burned))
+      if (burned && result.state === 'success') {
+        props.onDeposited(burned)
         return
       }
-      const nextBalance = await arcUsdcBalance(props.account)
-      props.onSent(
-        {
-          id: result.steps.find((step) => step.txHash)?.txHash?.slice(0, 10) ?? `pf_${Date.now()}`,
-          amount: props.amount,
-          fee,
-          recipient: props.recipient.trim(),
-          at: Date.now(),
-          links: linksFrom(result.steps),
-        },
-        nextBalance,
-      )
+      if (!burned) {
+        props.onStep('review')
+        props.onError('The send did not go through.')
+      }
     } catch (err) {
-      props.onStep('review')
-      props.onError(err instanceof Error ? err.message : 'The send failed.')
+      if (!arcTx) {
+        props.onStep('review')
+        props.onError(err instanceof Error ? err.message : 'The send failed.')
+      }
     } finally {
       props.onBusy(false)
     }
@@ -678,42 +706,19 @@ function Move(props: {
           </div>
         ) : null}
         {props.step === 'sending' ? (
-          <div className="pt-8">
-            <p className="text-sm text-muted">Waiting for your wallet, then Circle mints on Ethereum.</p>
+          <div className="pt-16 text-center">
+            <p className="text-sm text-muted">Confirm the send in your wallet.</p>
           </div>
         ) : null}
-        {props.step === 'done' && props.last ? (
-          <div className="flex flex-col items-center pt-10 text-center">
-            <span className="flex size-14 items-center justify-center rounded-full bg-accent text-on-accent">
-              <Check className="size-6" aria-hidden="true" />
-            </span>
-            <p className="mt-5 text-sm text-muted">SoFi receives</p>
-            <p className="hero-num mt-2 text-ink">{formatExact(props.last.amount)}</p>
-            <p className="mt-2 text-sm text-muted">USDC on Ethereum</p>
-            <dl className="panel mt-8 w-full divide-y divide-line text-left">
-              <Row label="Address" value={shortAddress(props.last.recipient)} mono />
-              <Row
-                label="You paid"
-                value={props.last.fee ? `${formatExact(addUsdc(props.last.amount, props.last.fee))} USDC` : '—'}
-              />
-              <Row label="Bridge fee" value={props.last.fee ? `$${formatExact(props.last.fee)}` : 'Quoted at send'} />
-              <Row label="Arc balance" value={props.balance ? `${formatMoney(props.balance)} USDC` : '—'} />
-            </dl>
-            {props.last.links.length > 0 ? (
-              <p className="mt-4 flex flex-wrap justify-center gap-3 text-sm">
-                {props.last.links.map((link) => (
-                  <a key={link.url} className="font-medium text-accent" href={link.url} target="_blank" rel="noreferrer">
-                    {link.name}
-                  </a>
-                ))}
-              </p>
-            ) : null}
-            <button type="button" onClick={props.onHome} className="press mt-6 h-12 w-full rounded-xl bg-accent text-base font-medium text-on-accent">
-              Done
-            </button>
-            <button type="button" onClick={props.onActivity} className="press mt-1 h-12 w-full text-sm font-medium text-muted">
-              View activity
-            </button>
+        {props.step === 'sent' ? (
+          <div className="flex flex-col items-center pt-16 text-center">
+            <svg className="size-16" viewBox="0 0 52 52" aria-hidden="true">
+              <circle className="check-ring" cx="26" cy="26" r="24" />
+              <path className="check-mark" d="M14 27.5 22.2 35.5 38 18" />
+            </svg>
+            <p className="mt-6 text-2xl font-medium tracking-tight text-ink">Sent</p>
+            <p className="hero-num mt-3 text-ink">{formatExact(props.amount)}</p>
+            <p className="mt-3 text-sm text-muted">Pending deposit to SoFi</p>
           </div>
         ) : null}
       </div>
@@ -837,8 +842,3 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
   )
 }
 
-function linksFrom(steps: SendStep[]) {
-  return steps
-    .filter((step) => step.explorerUrl)
-    .map((step) => ({ name: step.name, url: step.explorerUrl as string }))
-}
