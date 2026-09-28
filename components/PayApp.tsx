@@ -15,6 +15,7 @@ import {
 import type { Address } from 'viem'
 import { Mark } from '@/components/Mark'
 import {
+  addUsdc,
   dayLabel,
   formatExact,
   formatMoney,
@@ -310,8 +311,9 @@ function Home({
         )}
       </section>
       <p className="px-1 text-sm leading-relaxed text-muted">
-        SoFi receives the amount you enter. Circle’s forwarding fee is about $2 and is paid from the
-        Arc wallet on top of that amount, plus a little Arc gas. A wrong address cannot be reversed.
+        SoFi receives the amount you enter. PayFi adds the live Circle bridge fee, your Arc wallet pays
+        both, and Circle takes the fee out on Ethereum, plus a little Arc gas. A wrong address cannot
+        be reversed.
       </p>
     </div>
   )
@@ -392,7 +394,7 @@ function Guide({ onMove }: { onMove: () => void }) {
   ]
   const rows = [
     ['SoFi receives', 'The amount you enter'],
-    ['Circle bridge fee', 'About $2, paid on Arc'],
+    ['Circle bridge fee', 'Added from your Arc balance'],
     ['You also pay', 'A little Arc gas'],
     ['Per move', 'Up to 25,000 USDC'],
     ['Network', 'Ethereum only'],
@@ -432,6 +434,13 @@ function Guide({ onMove }: { onMove: () => void }) {
   )
 }
 
+async function loadBridgeFee(amount: string): Promise<string | null> {
+  const response = await fetch(`/api/fee?amount=${encodeURIComponent(amount)}`)
+  const data = (await response.json()) as { fee?: string }
+  if (!response.ok || !data.fee || amountError(data.fee)) return null
+  return data.fee
+}
+
 function Move(props: {
   account: Address | null
   balance: string | null
@@ -455,6 +464,7 @@ function Move(props: {
 }) {
   const [tried, setTried] = useState(false)
   const [fee, setFee] = useState<string | null>(null)
+  const [feeState, setFeeState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const balanceValue = props.balance ?? '0'
   const problem = !props.account
     ? 'Connect an Arc wallet first.'
@@ -473,17 +483,33 @@ function Move(props: {
             : 'Receipt'
   const index = props.step === 'amount' ? '1' : props.step === 'address' ? '2' : props.step === 'review' ? '3' : ''
 
+  const paid = fee ? addUsdc(props.amount, fee) : null
+  const reviewProblem =
+    feeState === 'failed'
+      ? 'Circle did not quote a bridge fee.'
+      : paid && amountError(paid)
+        ? amountError(paid)
+        : paid && props.balance != null && toUnits(paid) > toUnits(props.balance)
+          ? 'The bridge fee makes this more than the Arc balance.'
+          : null
+
   useEffect(() => {
     if (props.step !== 'review' || amountError(props.amount)) return
     let cancelled = false
     setFee(null)
-    fetch(`/api/fee?amount=${encodeURIComponent(props.amount)}`)
-      .then((response) => response.json())
-      .then((data: { fee?: string }) => {
-        if (!cancelled && data.fee) setFee(data.fee)
+    setFeeState('loading')
+    loadBridgeFee(props.amount)
+      .then((next) => {
+        if (cancelled) return
+        if (!next) {
+          setFeeState('failed')
+          return
+        }
+        setFee(next)
+        setFeeState('ready')
       })
       .catch(() => {
-        if (!cancelled) setFee(null)
+        if (!cancelled) setFeeState('failed')
       })
     return () => {
       cancelled = true
@@ -508,7 +534,7 @@ function Move(props: {
       props.onStep('review')
       return
     }
-    if (props.step !== 'review' || !props.account) return
+    if (props.step !== 'review' || !props.account || !fee || reviewProblem) return
     const provider = injectedProvider()
     if (!provider) {
       props.onError('Open PayFi in a browser with a wallet extension.')
@@ -516,12 +542,25 @@ function Move(props: {
     }
     props.onError('')
     props.onBusy(true)
-    props.onStep('sending')
     try {
+      const fresh = await loadBridgeFee(props.amount)
+      if (!fresh) {
+        setFeeState('failed')
+        props.onError('Circle did not quote a bridge fee.')
+        return
+      }
+      if (fresh !== fee) {
+        setFee(fresh)
+        setFeeState('ready')
+        props.onError('The bridge fee changed. Check the new total, then confirm.')
+        return
+      }
+      props.onStep('sending')
       const result = await sendArcUsdcToSofi({
         provider,
         recipient: props.recipient,
         amount: props.amount,
+        fee,
       })
       if (result.state !== 'success') {
         props.onStep('review')
@@ -550,7 +589,10 @@ function Move(props: {
 
   const showFooter = props.step === 'amount' || props.step === 'address' || props.step === 'review'
   const continueDisabled =
-    props.busy || (props.step === 'amount' && !!problem) || (props.step === 'address' && (!!destination || !props.attested))
+    props.busy ||
+    (props.step === 'amount' && !!problem) ||
+    (props.step === 'address' && (!!destination || !props.attested)) ||
+    (props.step === 'review' && (feeState !== 'ready' || !!reviewProblem))
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -580,6 +622,7 @@ function Move(props: {
             <p className="mt-3 text-center text-sm text-muted">
               Available {props.balance == null ? '—' : formatMoney(props.balance)} USDC
             </p>
+            <p className="mt-1 text-center text-sm text-muted">A bridge fee is added before you confirm.</p>
             <div className="mt-5 grid grid-cols-4 gap-2">
               {['100', '500', '1000'].map((chip) => (
                 <button key={chip} type="button" onClick={() => props.onAmount(chip)} className="press h-11 rounded-full bg-tint text-sm font-medium text-accent">
@@ -623,13 +666,14 @@ function Move(props: {
               <Row label="To" value="SoFi Crypto" />
               <Row label="Network" value="Ethereum" />
               <Row label="Address" value={shortAddress(props.recipient)} mono />
-              <Row label="Amount" value={`${formatExact(props.amount)} USDC`} />
-              <Row label="Bridge fee" value={fee ? `$${fee} on Arc` : 'Quoting Circle…'} />
+              <Row label="Bridge fee" value={fee ? `$${formatExact(fee)}` : feeState === 'failed' ? 'Unavailable' : 'Quoting Circle…'} />
+              <Row label="You pay" value={paid ? `${formatExact(paid)} USDC` : '—'} />
             </dl>
             <p className="px-1 text-sm leading-relaxed text-muted">
-              Circle burns this USDC on Arc and mints Ethereum USDC at the address above. The fee is extra
-              and is not taken out of what SoFi receives. A wrong address cannot be reversed.
+              Circle burns what you pay on Arc and mints the amount above on Ethereum. The bridge fee is the
+              difference, taken out on Ethereum. A wrong address cannot be reversed.
             </p>
+            {reviewProblem ? <p className="text-sm text-bad">{reviewProblem}</p> : null}
             {props.error ? <p className="text-sm text-bad">{props.error}</p> : null}
           </div>
         ) : null}
@@ -648,7 +692,11 @@ function Move(props: {
             <p className="mt-2 text-sm text-muted">USDC on Ethereum</p>
             <dl className="panel mt-8 w-full divide-y divide-line text-left">
               <Row label="Address" value={shortAddress(props.last.recipient)} mono />
-              <Row label="Bridge fee" value={props.last.fee ? `$${props.last.fee}` : 'Quoted at send'} />
+              <Row
+                label="You paid"
+                value={props.last.fee ? `${formatExact(addUsdc(props.last.amount, props.last.fee))} USDC` : '—'}
+              />
+              <Row label="Bridge fee" value={props.last.fee ? `$${formatExact(props.last.fee)}` : 'Quoted at send'} />
               <Row label="Arc balance" value={props.balance ? `${formatMoney(props.balance)} USDC` : '—'} />
             </dl>
             {props.last.links.length > 0 ? (

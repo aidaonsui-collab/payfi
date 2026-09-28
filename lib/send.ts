@@ -1,6 +1,7 @@
 import { BridgeKit } from '@circle-fin/bridge-kit'
 import { createViemAdapterFromProvider } from '@circle-fin/adapter-viem-v2'
 import type { Address } from 'viem'
+import { addUsdc } from './format'
 import { amountError, sofiAddressError } from './validate'
 
 type Eip1193 = {
@@ -24,11 +25,21 @@ export async function sendArcUsdcToSofi(opts: {
   provider: Eip1193
   recipient: string
   amount: string
+  fee: string
 }): Promise<SendOutcome> {
   const addressError = sofiAddressError(opts.recipient)
   if (addressError) throw new Error(addressError)
-  const badAmount = amountError(opts.amount)
+  const receive = opts.amount.trim()
+  const fee = opts.fee.trim()
+  const badAmount = amountError(receive)
   if (badAmount) throw new Error(badAmount)
+  if (amountError(fee)) throw new Error('Circle did not quote a bridge fee.')
+  // Arc rejects source-paid ("receive-exact") fees. Burn the typed amount
+  // plus the quoted forwarding cap and pin maxFee to that cap, so the
+  // Ethereum mint is at least the amount SoFi should receive.
+  const burn = addUsdc(receive, fee)
+  const tooMuch = amountError(burn)
+  if (tooMuch) throw new Error(tooMuch)
 
   const adapter = await createViemAdapterFromProvider({
     provider: opts.provider as never,
@@ -41,22 +52,21 @@ export async function sendArcUsdcToSofi(opts: {
       recipientAddress: opts.recipient.trim() as Address,
       useForwarder: true as const,
     },
-    amount: opts.amount.trim(),
+    amount: burn,
     token: 'USDC' as const,
-    config: { feePayment: 'source' as const },
+    config: {
+      transferSpeed: 'SLOW' as const,
+      maxFee: fee,
+    },
   }
   const estimate = await kit.estimate(params)
   const result = await kit.bridge({
     ...params,
     ...(estimate.quote !== undefined ? { quote: estimate.quote } : {}),
   })
-  const received =
-    'amountReceived' in estimate && typeof estimate.amountReceived === 'string'
-      ? estimate.amountReceived
-      : result.amount
   return {
     state: result.state,
-    received,
+    received: receive,
     steps: result.steps.map((step) => ({
       name: step.name,
       state: step.state,

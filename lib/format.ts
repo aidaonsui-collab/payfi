@@ -7,6 +7,17 @@ export function toUnits(raw: string): bigint {
   return BigInt(whole) * SCALE + BigInt(frac.padEnd(6, '0'))
 }
 
+export function unitsToAmount(units: bigint): string {
+  if (units <= 0n) return '0'
+  const whole = units / SCALE
+  const frac = (units % SCALE).toString().padStart(6, '0').replace(/0+$/, '')
+  return frac ? `${whole}.${frac}` : whole.toString()
+}
+
+export function addUsdc(left: string, right: string): string {
+  return unitsToAmount(toUnits(left) + toUnits(right))
+}
+
 export function formatMoney(raw: string): string {
   const units = toUnits(raw || '0')
   const whole = units / SCALE
