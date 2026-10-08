@@ -11,6 +11,7 @@ import { irisDomain } from '@/lib/transfer-id'
 export function HomeView({
   balance,
   account,
+  name,
   hidden,
   receipts,
   error,
@@ -24,6 +25,7 @@ export function HomeView({
 }: {
   balance: string | null
   account: string | null
+  name: string | null
   hidden: boolean
   receipts: Receipt[]
   error: string
@@ -62,7 +64,7 @@ export function HomeView({
             </button>
           </div>
           <p className="num mt-3 text-hero font-semibold leading-none tracking-tight text-ink">{figure}</p>
-          <p className="mt-3 text-sm text-muted">Available{account ? ` · ${shortAddress(account)}` : ' on Sui'}</p>
+          <p className="mt-3 text-sm text-muted">Available{account ? ` · ${name ?? shortAddress(account)}` : ' on Sui'}</p>
           <button type="button" onClick={onMove} className="press mt-5 h-10 rounded-full bg-accent px-5 text-sm font-semibold text-on-accent">
             Move to SoFi
           </button>

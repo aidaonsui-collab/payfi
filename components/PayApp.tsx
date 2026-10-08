@@ -38,6 +38,7 @@ export function PayApp() {
   const [hidden, setHidden] = useState(false)
   const [dark, setDark] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [name, setName] = useState<string | null>(null)
 
   useEffect(() => {
     setReceipts(loadReceipts())
@@ -85,6 +86,25 @@ export function PayApp() {
     setChoices(listSuiWallets())
     return watchSuiWallets(() => setChoices(listSuiWallets()))
   }, [chooserOpen])
+
+  useEffect(() => {
+    if (!account) {
+      setName(null)
+      return
+    }
+    let cancelled = false
+    fetch(`/api/name?address=${encodeURIComponent(account)}`)
+      .then(async (response) => {
+        const data = (await response.json()) as { name?: unknown }
+        if (!cancelled) setName(response.ok && typeof data.name === 'string' ? data.name : null)
+      })
+      .catch(() => {
+        if (!cancelled) setName(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [account])
 
   function openMove() {
     setError('')
@@ -138,6 +158,7 @@ export function PayApp() {
     setAccount(null)
     setBalance(null)
     setCoins(null)
+    setName(null)
     setAccountOpen(false)
     setError('')
   }
@@ -213,8 +234,8 @@ export function PayApp() {
             {dark ? <Sun className="size-5" /> : <Moon className="size-5" />}
           </button>
           {account ? (
-            <button type="button" onClick={() => setAccountOpen(true)} className="press h-9 rounded-full px-3 text-xs font-semibold tracking-wide uppercase hover:bg-nav-ink/10">
-              {shortAddress(account)}
+            <button type="button" onClick={() => setAccountOpen(true)} className="press h-9 max-w-40 truncate rounded-full px-3 text-xs font-semibold tracking-wide hover:bg-nav-ink/10">
+              {name ?? shortAddress(account)}
             </button>
           ) : (
             <button type="button" onClick={() => setChooserOpen(true)} disabled={busy} className="press h-9 rounded-full px-3 text-xs font-semibold tracking-wide uppercase hover:bg-nav-ink/10 disabled:opacity-40">
@@ -259,6 +280,7 @@ export function PayApp() {
               <HomeView
                 balance={balance}
                 account={account}
+                name={name}
                 hidden={hidden}
                 receipts={receipts}
                 error={error}
@@ -316,7 +338,8 @@ export function PayApp() {
 
       {accountOpen && account ? (
         <Sheet title="Wallet" onClose={() => setAccountOpen(false)}>
-          <p className="font-mono text-sm leading-relaxed break-all text-ink">{account}</p>
+          {name ? <p className="text-base font-semibold text-ink">{name}</p> : null}
+          <p className={`${name ? 'mt-2 ' : ''}font-mono text-sm leading-relaxed break-all text-ink`}>{account}</p>
           <p className="mt-2 text-sm text-muted">Sui mainnet · USDC address balance</p>
           <div className="mt-4 mb-3 flex gap-2">
             <button
