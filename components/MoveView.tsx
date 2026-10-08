@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { Check, ChevronLeft, Delete, Lock } from 'lucide-react'
-import { addUsdc, formatExact, formatMoney, formatTyping, pushAmountKey, shortAddress, toUnits } from '@/lib/format'
+import {
+  addressGroups,
+  addUsdc,
+  formatExact,
+  formatMoney,
+  formatTyping,
+  pushAmountKey,
+  shortAddress,
+  toUnits,
+} from '@/lib/format'
 import type { Receipt } from '@/lib/receipts'
 import { sendSuiUsdcToSofi } from '@/lib/send'
 import { amountError, sofiAddressError } from '@/lib/validate'
@@ -24,6 +33,7 @@ export function MoveView(props: {
   balance: string | null
   amount: string
   recipient: string
+  lastAddress: string | null
   attested: boolean
   step: Step
   busy: boolean
@@ -51,6 +61,11 @@ export function MoveView(props: {
       : null
   const problem = typedProblem || overBalance
   const destination = sofiAddressError(props.recipient)
+  // The last SoFi address when this one differs from it, to warn about a swapped paste.
+  const changedFrom =
+    !destination && props.lastAddress && props.lastAddress.toLowerCase() !== props.recipient.trim().toLowerCase()
+      ? props.lastAddress
+      : null
   const title =
     props.step === 'amount' ? 'Amount' : props.step === 'address' ? 'SoFi address' : props.step === 'review' ? 'Review' : props.step === 'sending' ? 'Sending' : 'Sent'
   const progress = props.step === 'amount' ? 1 : props.step === 'address' ? 2 : 3
@@ -248,6 +263,7 @@ export function MoveView(props: {
             recipient={props.recipient}
             attested={props.attested}
             destination={destination}
+            changedFrom={changedFrom}
             tried={tried}
             onRecipient={(value) => {
               props.onRecipient(value)
@@ -268,10 +284,21 @@ export function MoveView(props: {
             <dl className="divide-y divide-line overflow-hidden rounded-card border border-line">
               <Row label="To" value="SoFi Crypto" />
               <Row label="Network" value="Ethereum" />
-              <Row label="Address" value={shortAddress(props.recipient)} mono />
+              <div className="px-4 py-3">
+                <dt className="text-sm text-muted">SoFi address</dt>
+                <dd className="mt-2">
+                  <div className="grid grid-cols-[repeat(5,max-content)] gap-x-2 gap-y-1 font-mono text-base font-medium text-ink">
+                    {addressGroups(props.recipient).map((group, i) => (
+                      <span key={i}>{group}</span>
+                    ))}
+                  </div>
+                  <div className="mt-2 text-xs text-muted">Check every group against the address in SoFi.</div>
+                </dd>
+              </div>
               <Row label="Bridge fee" value={fee ? `${formatExact(fee)} USDC` : feeState === 'failed' ? 'Unavailable' : 'Getting the fee'} />
               <Row label="You pay" value={paid ? `${formatExact(paid)} USDC` : '—'} />
             </dl>
+            {changedFrom ? <NewAddressNote last={changedFrom} /> : null}
             <p className="text-sm leading-relaxed text-muted">
               Your wallet signs the burn. PayFi never holds the USDC. Circle mints the amount above on Ethereum and takes the bridge fee there. A wrong address cannot be reversed.
             </p>
@@ -325,6 +352,7 @@ function AddressStep({
   recipient,
   attested,
   destination,
+  changedFrom,
   tried,
   onRecipient,
   onAttest,
@@ -332,6 +360,7 @@ function AddressStep({
   recipient: string
   attested: boolean
   destination: string | null
+  changedFrom: string | null
   tried: boolean
   onRecipient: (value: string) => void
   onAttest: (value: boolean) => void
@@ -377,6 +406,7 @@ function AddressStep({
           Ethereum
         </span>
       </div>
+      {changedFrom ? <NewAddressNote last={changedFrom} /> : null}
       <button
         type="button"
         role="checkbox"
@@ -396,11 +426,20 @@ function AddressStep({
   )
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function NewAddressNote({ last }: { last: string }) {
+  return (
+    <p className="text-sm leading-relaxed text-bad">
+      This is not the address your last SoFi deposit went to (<span className="font-mono">{shortAddress(last)}</span>).
+      Check it against SoFi before you send.
+    </p>
+  )
+}
+
+function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">
       <dt className="text-sm text-muted">{label}</dt>
-      <dd className={`text-right text-sm font-semibold text-ink ${mono ? 'font-mono' : ''}`}>{value}</dd>
+      <dd className="text-right text-sm font-semibold text-ink">{value}</dd>
     </div>
   )
 }
