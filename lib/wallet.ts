@@ -30,18 +30,32 @@ function suiWallets(): Wallet[] {
     .filter((wallet) => canSend(wallet) && connectFeature(wallet))
 }
 
-function rank(wallet: Wallet): number {
-  const onMainnet = wallet.accounts.some((account) => account.chains.includes(SUI_MAINNET_CHAIN))
-  const preferred = /slush|sui/i.test(wallet.name) ? 1 : 0
-  return (onMainnet ? 2 : 0) + preferred
+export type SuiWalletChoice = {
+  name: string
+  icon: string
 }
 
-export async function connectSui(): Promise<string> {
-  const wallets = suiWallets().sort((a, b) => rank(b) - rank(a))
-  const wallet = wallets[0]
-  if (!wallet) throw new Error('Open PayFi in a browser with a Sui wallet.')
+export function listSuiWallets(): SuiWalletChoice[] {
+  return suiWallets()
+    .map((wallet) => ({ name: wallet.name, icon: wallet.icon }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export function watchSuiWallets(onChange: () => void): () => void {
+  const wallets = getWallets()
+  const stopRegister = wallets.on('register', onChange)
+  const stopUnregister = wallets.on('unregister', onChange)
+  return () => {
+    stopRegister()
+    stopUnregister()
+  }
+}
+
+export async function connectSui(name: string): Promise<string> {
+  const wallet = suiWallets().find((item) => item.name === name)
+  if (!wallet) throw new Error('That wallet is no longer available.')
   const connect = connectFeature(wallet)
-  if (!connect) throw new Error('Open PayFi in a browser with a Sui wallet.')
+  if (!connect) throw new Error('That wallet is no longer available.')
   const result = await connect.connect()
   const account = result.accounts.find((item) => item.chains.includes(SUI_MAINNET_CHAIN))
   if (!account) throw new Error('Switch the wallet to Sui mainnet before sending.')

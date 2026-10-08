@@ -28,7 +28,7 @@ import { depositLabel, loadReceipts, saveReceipts, type Receipt } from '@/lib/re
 import { sendSuiUsdcToSofi } from '@/lib/send'
 import { irisDomain } from '@/lib/transfer-id'
 import { amountError, sofiAddressError } from '@/lib/validate'
-import { connectSui, suiUsdcBalance } from '@/lib/wallet'
+import { connectSui, listSuiWallets, suiUsdcBalance, watchSuiWallets, type SuiWalletChoice } from '@/lib/wallet'
 
 type View = 'home' | 'move' | 'activity' | 'guide'
 type Step = 'amount' | 'address' | 'review' | 'sending' | 'sent'
@@ -60,6 +60,7 @@ export function PayApp() {
   const [receipts, setReceipts] = useState<Receipt[]>([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [choices, setChoices] = useState<SuiWalletChoice[] | null>(null)
 
   useEffect(() => {
     setReceipts(loadReceipts())
@@ -129,11 +130,31 @@ export function PayApp() {
     setView('move')
   }
 
-  async function connect() {
+  useEffect(() => {
+    if (!choices) return
+    return watchSuiWallets(() => setChoices(listSuiWallets()))
+  }, [choices])
+
+  useEffect(() => {
+    if (!choices) return
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setChoices(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [choices])
+
+  function openChooser() {
+    setError('')
+    setChoices(listSuiWallets())
+  }
+
+  async function connect(name: string) {
+    setChoices(null)
     setError('')
     setBusy(true)
     try {
-      const address = await connectSui()
+      const address = await connectSui(name)
       const next = await suiUsdcBalance(address)
       setAccount(address)
       setBalance(next.balance)
@@ -197,7 +218,7 @@ export function PayApp() {
               receipts={receipts}
               error={error}
               busy={busy}
-              onConnect={connect}
+              onConnect={openChooser}
               onMove={openMove}
               onActivity={() => setView('activity')}
             />
@@ -231,7 +252,7 @@ export function PayApp() {
             onStep={setStep}
             onHome={() => setView('home')}
             onActivity={() => setView('activity')}
-            onConnect={connect}
+            onConnect={openChooser}
             onSent={remember}
             onError={setError}
             onBusy={setBusy}
@@ -257,6 +278,61 @@ export function PayApp() {
               )
             })}
           </nav>
+      </div>
+      {choices ? (
+        <WalletChooser wallets={choices} busy={busy} onClose={() => setChoices(null)} onPick={(name) => void connect(name)} />
+      ) : null}
+    </div>
+  )
+}
+
+function WalletChooser({
+  wallets,
+  busy,
+  onClose,
+  onPick,
+}: {
+  wallets: SuiWalletChoice[]
+  busy: boolean
+  onClose: () => void
+  onPick: (name: string) => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wallet-chooser-title"
+        className="panel w-full max-w-sm p-4"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 px-1">
+          <h2 id="wallet-chooser-title" className="text-base font-medium text-ink">
+            Choose a wallet
+          </h2>
+          <button type="button" onClick={onClose} className="press h-11 px-2 text-sm font-medium text-muted">
+            Close
+          </button>
+        </div>
+        {wallets.length === 0 ? (
+          <p className="px-1 py-6 text-sm leading-relaxed text-muted">Open PayFi in a browser with a Sui wallet.</p>
+        ) : (
+          <ul className="mt-2 flex flex-col gap-2">
+            {wallets.map((wallet) => (
+              <li key={wallet.name}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onPick(wallet.name)}
+                  className="press flex h-14 w-full items-center gap-3 rounded-xl border border-line bg-fill px-3 text-left disabled:opacity-40"
+                >
+                  <img src={wallet.icon} alt="" className="size-8 rounded-lg" />
+                  <span className="text-sm font-medium text-ink">{wallet.name}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )
