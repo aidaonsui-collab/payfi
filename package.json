@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3030",
     "build": "next build",
-    "test": "tsx --test lib/validate.test.ts lib/forward-fee.test.ts lib/receipts.test.ts lib/deposit-status.test.ts lib/burn.test.ts lib/transfer-id.test.ts lib/sui-balance.test.ts lib/suins-name.test.ts"
+    "test": "tsx --test lib/validate.test.ts lib/forward-fee.test.ts lib/receipts.test.ts lib/deposit-status.test.ts lib/burn.test.ts lib/transfer-id.test.ts lib/sui-balance.test.ts lib/suins-name.test.ts lib/format.test.ts lib/wallet.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -16,7 +16,7 @@
     "@mysten/wallet-standard": "^0.21.33",
     "@tailwindcss/postcss": "^4.3.3",
     "lucide-react": "^1.48.0",
-    "next": "^15.5.26",
+    "next": "^15.5.27",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tailwindcss": "^4.3.3",

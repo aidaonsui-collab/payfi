@@ -51,6 +51,10 @@ export function watchSuiWallets(onChange: () => void): () => void {
   }
 }
 
+// The wallet the user picked. Only it signs: another extension can list the
+// same public address, and it must not get the burn or report its result.
+let connected: Wallet | null = null
+
 export async function connectSui(name: string): Promise<string> {
   const wallet = suiWallets().find((item) => item.name === name)
   if (!wallet) throw new Error('That wallet is no longer available.')
@@ -59,25 +63,25 @@ export async function connectSui(name: string): Promise<string> {
   const result = await connect.connect()
   const account = result.accounts.find((item) => item.chains.includes(SUI_MAINNET_CHAIN))
   if (!account) throw new Error('Switch the wallet to Sui mainnet before sending.')
+  connected = wallet
   return account.address
 }
 
+export function forgetSuiWallet() {
+  connected = null
+}
+
 export async function executeSuiBurn(address: string, transaction: Transaction): Promise<{ digest: string; effects: string }> {
-  const wallets = suiWallets()
-  for (const wallet of wallets) {
-    const account = wallet.accounts.find(
-      (item) => item.address === address && item.chains.includes(SUI_MAINNET_CHAIN),
-    )
-    if (!account) continue
-    const result = await signAndExecuteTransaction(wallet, {
-      transaction,
-      account,
-      chain: SUI_MAINNET_CHAIN,
-    })
-    if (!result.digest || !result.effects) throw new Error('The wallet did not return the Sui burn.')
-    return { digest: result.digest, effects: result.effects }
-  }
-  throw new Error('Connect a Sui wallet on mainnet first.')
+  const wallet = connected
+  const account = wallet?.accounts.find((item) => item.address === address && item.chains.includes(SUI_MAINNET_CHAIN))
+  if (!wallet || !account) throw new Error('Connect a Sui wallet on mainnet first.')
+  const result = await signAndExecuteTransaction(wallet, {
+    transaction,
+    account,
+    chain: SUI_MAINNET_CHAIN,
+  })
+  if (!result.digest || !result.effects) throw new Error('The wallet did not return the Sui burn.')
+  return { digest: result.digest, effects: result.effects }
 }
 
 export async function suiUsdcBalance(address: string): Promise<{ balance: string; coins: string }> {

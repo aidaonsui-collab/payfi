@@ -47,6 +47,13 @@ export function shortAddress(raw: string): string {
   return `${value.slice(0, 6)}…${value.slice(-4)}`
 }
 
+/** The whole address in groups of four, for checking against another screen. */
+export function addressGroups(raw: string): string[] {
+  const value = raw.trim()
+  if (!/^0x[0-9a-fA-F]{40}$/.test(value)) return [value]
+  return [value.slice(0, 6), ...(value.slice(6).match(/.{4}/g) ?? [])]
+}
+
 export function formatWhen(ts: number): string {
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',

@@ -206,7 +206,8 @@ function ReceiptRow({ item }: { item: Receipt }) {
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-semibold text-ink">SoFi Crypto</span>
         <span className="mt-0.5 block truncate text-sm text-muted">
-          {depositLabel(item.status)} · {formatWhen(item.at)}
+          <span className={item.status === 'failed' ? 'text-bad' : undefined}>{depositLabel(item.status)}</span> ·{' '}
+          {formatWhen(item.at)}
         </span>
       </span>
       <span className="num shrink-0 text-right text-sm font-semibold text-ink">−{formatMoney(item.amount)}</span>
@@ -222,8 +223,20 @@ function ReceiptDetail({ item, onClose }: { item: Receipt; onClose: () => void }
         <span className="flex size-12 items-center justify-center rounded-full bg-tint text-sm font-semibold text-accent">SF</span>
         <p className="mt-3 text-sm text-muted">To SoFi Crypto</p>
         <p className="num mt-1 text-3xl font-semibold tracking-tight text-ink">−{formatExact(item.amount)}</p>
-        <p className={`mt-2 text-sm font-medium ${item.status === 'deposited' ? 'text-accent' : 'text-muted'}`}>{depositLabel(item.status)}</p>
+        <p
+          className={`mt-2 text-sm font-medium ${
+            item.status === 'deposited' ? 'text-accent' : item.status === 'failed' ? 'text-bad' : 'text-muted'
+          }`}
+        >
+          {depositLabel(item.status)}
+        </p>
       </div>
+      {item.status === 'failed' ? (
+        <p className="mt-2 text-sm leading-relaxed text-muted">
+          Circle burned this USDC but could not mint it on Ethereum. It is not lost: the mint to your SoFi address can
+          still be completed from the burn transaction.
+        </p>
+      ) : null}
       <dl className="mt-4 divide-y divide-line border-t border-line">
         <Detail label="When" value={formatWhen(item.at)} />
         <Detail label="Network" value="Ethereum" />

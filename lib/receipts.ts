@@ -1,4 +1,4 @@
-export type DepositStatus = 'pending' | 'deposited'
+export type DepositStatus = 'pending' | 'deposited' | 'failed'
 
 export type Receipt = {
   id: string
@@ -13,7 +13,15 @@ export type Receipt = {
 const KEY = 'payfi.receipts.v1'
 
 export function depositLabel(status: DepositStatus): string {
-  return status === 'deposited' ? 'Deposited to SoFi' : 'Pending deposit to SoFi'
+  if (status === 'deposited') return 'Deposited to SoFi'
+  if (status === 'failed') return 'Delivery to SoFi failed'
+  return 'Pending deposit to SoFi'
+}
+
+/** The SoFi address of the newest move that reached SoFi, if any. */
+export function lastDepositAddress(receipts: Receipt[]): string | null {
+  const last = receipts.find((item) => item.status === 'deposited' && /^0x[0-9a-fA-F]{40}$/.test(item.recipient))
+  return last ? last.recipient : null
 }
 
 export function normalizeReceipt(raw: unknown): Receipt | null {
@@ -29,7 +37,11 @@ export function normalizeReceipt(raw: unknown): Receipt | null {
       })
     : []
   const status: DepositStatus =
-    item.status === 'pending' || item.status === 'deposited' ? item.status : links.length > 0 ? 'deposited' : 'pending'
+    item.status === 'pending' || item.status === 'deposited' || item.status === 'failed'
+      ? item.status
+      : links.length > 0
+        ? 'deposited'
+        : 'pending'
   return {
     id: item.id,
     amount: item.amount,

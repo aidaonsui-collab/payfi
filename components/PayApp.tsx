@@ -7,9 +7,16 @@ import { MoveView, type Step } from '@/components/MoveView'
 import { ActivityView, GuideView, HomeView } from '@/components/PayViews'
 import { Sheet } from '@/components/Sheet'
 import { shortAddress } from '@/lib/format'
-import { loadReceipts, saveReceipts, type Receipt } from '@/lib/receipts'
+import { lastDepositAddress, loadReceipts, saveReceipts, type DepositStatus, type Receipt } from '@/lib/receipts'
 import { irisDomain } from '@/lib/transfer-id'
-import { connectSui, listSuiWallets, suiUsdcBalance, watchSuiWallets, type SuiWalletChoice } from '@/lib/wallet'
+import {
+  connectSui,
+  forgetSuiWallet,
+  listSuiWallets,
+  suiUsdcBalance,
+  watchSuiWallets,
+  type SuiWalletChoice,
+} from '@/lib/wallet'
 
 type View = 'home' | 'move' | 'activity' | 'guide'
 
@@ -48,13 +55,14 @@ export function PayApp() {
     document.documentElement.classList.toggle('dark', next)
   }, [])
 
-  const pendingIds = receipts
-    .filter((item) => item.status === 'pending' && irisDomain(item.id) != null)
+  // Failed rows are rechecked too, so a later Circle forward still flips them to deposited.
+  const undeliveredIds = receipts
+    .filter((item) => item.status !== 'deposited' && irisDomain(item.id) != null)
     .map((item) => item.id)
     .join(',')
 
   useEffect(() => {
-    const ids = pendingIds.split(',').filter(Boolean)
+    const ids = undeliveredIds.split(',').filter(Boolean)
     if (ids.length === 0) return
     let cancelled = false
     async function look() {
@@ -62,14 +70,17 @@ export function PayApp() {
         try {
           const response = await fetch(`/api/deposit?tx=${id}`)
           const data = (await response.json()) as { status?: string }
-          if (cancelled || data.status !== 'deposited') continue
+          const status: DepositStatus | null =
+            data.status === 'deposited' || data.status === 'failed' ? data.status : null
+          if (cancelled || !status) continue
           setReceipts((current) => {
-            const next = current.map((item) => (item.id === id ? { ...item, status: 'deposited' as const } : item))
+            if (!current.some((item) => item.id === id && item.status !== status)) return current
+            const next = current.map((item) => (item.id === id ? { ...item, status } : item))
             saveReceipts(next)
             return next
           })
         } catch {
-          // Keep the row pending until Circle reports the deposit.
+          // Keep the row as it is until Circle reports a change.
         }
       }
     }
@@ -79,7 +90,7 @@ export function PayApp() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [pendingIds])
+  }, [undeliveredIds])
 
   useEffect(() => {
     if (!chooserOpen) return
@@ -155,6 +166,7 @@ export function PayApp() {
   }
 
   function disconnect() {
+    forgetSuiWallet()
     setAccount(null)
     setBalance(null)
     setCoins(null)
@@ -171,6 +183,8 @@ export function PayApp() {
     })
     setStep('sent')
     setBusy(false)
+    // Each move needs its own address check.
+    setAttested(false)
     if (account) {
       suiUsdcBalance(account)
         .then((next) => {
@@ -179,6 +193,11 @@ export function PayApp() {
         })
         .catch(() => undefined)
     }
+  }
+
+  function changeRecipient(value: string) {
+    if (value !== recipient) setAttested(false)
+    setRecipient(value)
   }
 
   const coinNote = Boolean(account && balance === '0' && coins && coins !== '0')
@@ -252,12 +271,13 @@ export function PayApp() {
             balance={balance}
             amount={amount}
             recipient={recipient}
+            lastAddress={lastDepositAddress(receipts)}
             attested={attested}
             step={step}
             busy={busy}
             error={error}
             onAmount={setAmount}
-            onRecipient={setRecipient}
+            onRecipient={changeRecipient}
             onAttested={setAttested}
             onStep={setStep}
             onHome={() => setView('home')}
