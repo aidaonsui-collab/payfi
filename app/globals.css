@@ -1,21 +1,48 @@
 @import 'tailwindcss';
 
 @theme {
-  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --color-paper: #e7f1fb;
+  --font-sans: var(--font-manrope), 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-plex), ui-monospace, Menlo, Consolas, monospace;
+
+  --color-canvas: #e7f1fb;
   --color-card: #ffffff;
   --color-ink: #141c28;
   --color-muted: #4e6274;
   --color-faint: #7d92a6;
   --color-line: #d3e3f0;
-  --color-fill: #ffffff;
+  --color-fill: #f4f8fc;
   --color-tint: #d7eaf6;
   --color-accent: #1760b0;
   --color-on-accent: #f4f8fc;
   --color-bad: #9d2c2c;
-  --text-hero: clamp(2.5rem, 12vw, 4.25rem);
-  --radius-card: 1.5rem;
+  --color-nav: #1760b0;
+  --color-nav-ink: #f4f8fc;
+  --color-streak: #d7eaf6;
+
+  --radius-control: 0.75rem;
+  --radius-card: 1rem;
+
+  --text-hero: clamp(2.25rem, 9vw, 3.25rem);
+  --shadow-card: 0 1px 2px rgb(20 40 70 / 5%), 0 12px 32px rgb(20 40 70 / 6%);
+}
+
+.dark {
+  --color-canvas: #0e1a2b;
+  --color-card: #16263a;
+  --color-ink: #f3f6fa;
+  --color-muted: #a3b0c0;
+  --color-faint: #7d8b9c;
+  --color-line: #2a3d56;
+  --color-fill: #1c314c;
+  --color-tint: #1a3a62;
+  --color-accent: #4c8dff;
+  --color-on-accent: #ffffff;
+  --color-bad: #f0a8a2;
+  --color-nav: #123056;
+  --color-nav-ink: #f3f6fa;
+  --color-streak: #d7eaf6;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 35%);
+  color-scheme: dark;
 }
 
 @layer base {
@@ -23,7 +50,7 @@
   body {
     margin: 0;
     min-height: 100%;
-    background: var(--color-paper);
+    background: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -37,36 +64,61 @@
 }
 
 @layer components {
-  .app-screen { height: 100vh; height: 100dvh; }
+  .fi-race {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.04em;
+    font-style: italic;
+    font-weight: 800;
+    letter-spacing: -0.06em;
+    color: var(--color-streak);
+    transform: skewX(-8deg);
+    transform-origin: left center;
+  }
+  .fi-streaks {
+    width: 0.72em;
+    height: 0.62em;
+    margin-left: 0.04em;
+    overflow: visible;
+  }
+  .fi-streaks path {
+    fill: none;
+    stroke: var(--color-streak);
+    stroke-width: 1.7;
+    stroke-linecap: round;
+  }
   .safe-b { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
   .safe-x {
     padding-left: max(1.25rem, env(safe-area-inset-left));
     padding-right: max(1.25rem, env(safe-area-inset-right));
   }
   .safe-t { padding-top: max(0.75rem, env(safe-area-inset-top)); }
-  .press { transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .press { transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1), filter 150ms cubic-bezier(0.22, 1, 0.36, 1); }
   .press:active:not(:disabled) { transform: scale(0.98); }
+  .btn-primary {
+    display: flex;
+    height: 3rem;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .btn-primary:disabled { opacity: 0.4; }
   .num { font-variant-numeric: tabular-nums; letter-spacing: -0.04em; }
-  .hero-num {
-    font-size: var(--text-hero);
-    line-height: 1;
-    font-weight: 500;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.045em;
-  }
-  .panel {
-    background: var(--color-card);
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-card);
-  }
+  .text-hero { font-size: var(--text-hero); }
   .key {
     height: 3.25rem;
-    border-radius: 1rem;
+    border-radius: var(--radius-control);
     background: var(--color-fill);
-    font-size: 1.5rem;
+    font-size: 1.375rem;
     font-weight: 500;
     font-variant-numeric: tabular-nums;
-    letter-spacing: -0.03em;
+    color: var(--color-ink);
   }
 }
 
@@ -87,15 +139,11 @@
   stroke-width: 3.5;
   stroke-dasharray: 48;
   stroke-dashoffset: 48;
-  animation: check-mark 380ms 420ms ease forwards;
+  animation: check-mark 380ms 280ms ease forwards;
 }
 
-@keyframes check-ring {
-  to { stroke-dashoffset: 0; }
-}
-@keyframes check-mark {
-  to { stroke-dashoffset: 0; }
-}
+@keyframes check-ring { to { stroke-dashoffset: 0; } }
+@keyframes check-mark { to { stroke-dashoffset: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   .press { transition: none; }
