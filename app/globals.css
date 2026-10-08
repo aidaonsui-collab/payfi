@@ -3,16 +3,16 @@
 @theme {
   --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --color-paper: #e7f3ec;
+  --color-paper: #e7f1fb;
   --color-card: #ffffff;
-  --color-ink: #14241c;
-  --color-muted: #4e675c;
-  --color-faint: #7d958a;
-  --color-line: #d3e6dc;
+  --color-ink: #141c28;
+  --color-muted: #4e6274;
+  --color-faint: #7d92a6;
+  --color-line: #d3e3f0;
   --color-fill: #ffffff;
-  --color-tint: #d7efe4;
-  --color-accent: #0b6e56;
-  --color-on-accent: #f4fbf7;
+  --color-tint: #d7eaf6;
+  --color-accent: #1760b0;
+  --color-on-accent: #f4f8fc;
   --color-bad: #9d2c2c;
   --text-hero: clamp(2.5rem, 12vw, 4.25rem);
   --radius-card: 1.5rem;
