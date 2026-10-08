@@ -1,6 +1,6 @@
 import { unitsToAmount } from './format'
 
-/** Standard CCTP finality. Arc is not a Fast Transfer source. */
+/** Standard CCTP finality. Sui is not a Fast Transfer source. */
 const STANDARD_FINALITY = 2000
 
 function asUnits(value: unknown): bigint | null {
@@ -15,8 +15,8 @@ function asUnits(value: unknown): bigint | null {
 }
 
 /**
- * Circle's destination-paid forwarding cap for Arc → Ethereum.
- * Bridge Kit puts `forwardFee.high` into maxFee. The quote is flat;
+ * Circle's destination-paid forwarding cap for Sui → Ethereum.
+ * The burn pins `forwardFee.high` as maxFee. The quote is flat;
  * the CCTP protocol fee on this route is zero.
  */
 export function forwardFeeFromTiers(payload: unknown): string | null {

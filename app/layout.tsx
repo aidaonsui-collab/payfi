@@ -3,7 +3,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'PayFi',
-  description: 'Send Arc USDC to a SoFi Ethereum USDC address.',
+  description: 'Send Sui USDC to a SoFi Ethereum USDC address.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -5,15 +5,15 @@
   "scripts": {
     "dev": "next dev -p 3030",
     "build": "next build",
-    "test": "tsx --test lib/validate.test.ts lib/forward-fee.test.ts lib/receipts.test.ts lib/deposit-status.test.ts"
+    "test": "tsx --test lib/validate.test.ts lib/forward-fee.test.ts lib/receipts.test.ts lib/deposit-status.test.ts lib/burn.test.ts lib/transfer-id.test.ts lib/sui-balance.test.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@circle-fin/adapter-viem-v2": "^1.18.0",
-    "@circle-fin/bridge-kit": "^1.15.1",
+    "@mysten/sui": "^2.35.0",
+    "@mysten/wallet-standard": "^0.21.33",
     "@tailwindcss/postcss": "^4.3.3",
     "lucide-react": "^1.48.0",
     "next": "^15.5.26",

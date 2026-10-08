@@ -1,3 +1,4 @@
+import { IRIS_FORWARD_FEE } from '@/lib/chains'
 import { forwardFeeFromTiers } from '@/lib/forward-fee'
 import { amountError } from '@/lib/validate'
 
@@ -8,7 +9,7 @@ export async function GET(request: Request) {
   if (amountError(amount)) {
     return Response.json({ error: 'Enter a USDC amount first.' }, { status: 400 })
   }
-  const response = await fetch('https://iris-api.circle.com/v2/burn/USDC/fees/26/0?forward=true', {
+  const response = await fetch(IRIS_FORWARD_FEE, {
     cache: 'no-store',
   })
   if (!response.ok) {

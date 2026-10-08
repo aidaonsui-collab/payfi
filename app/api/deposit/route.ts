@@ -1,13 +1,16 @@
+import { irisMessagesUrl } from '@/lib/chains'
 import { depositStatusFromIris } from '@/lib/deposit-status'
+import { irisDomain } from '@/lib/transfer-id'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   const tx = new URL(request.url).searchParams.get('tx') ?? ''
-  if (!/^0x[0-9a-fA-F]{64}$/.test(tx)) {
+  const domain = irisDomain(tx)
+  if (domain == null) {
     return Response.json({ error: 'Missing transfer.' }, { status: 400 })
   }
-  const response = await fetch(`https://iris-api.circle.com/v2/messages/26?transactionHash=${tx}`, {
+  const response = await fetch(irisMessagesUrl(domain, tx), {
     cache: 'no-store',
   })
   if (!response.ok) {

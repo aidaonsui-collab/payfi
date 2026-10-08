@@ -12,7 +12,6 @@ import {
   House,
   Lock,
 } from 'lucide-react'
-import type { Address } from 'viem'
 import { Mark } from '@/components/Mark'
 import {
   addUsdc,
@@ -26,9 +25,10 @@ import {
   toUnits,
 } from '@/lib/format'
 import { depositLabel, loadReceipts, saveReceipts, type Receipt } from '@/lib/receipts'
-import { sendArcUsdcToSofi } from '@/lib/send'
+import { sendSuiUsdcToSofi } from '@/lib/send'
+import { irisDomain } from '@/lib/transfer-id'
 import { amountError, sofiAddressError } from '@/lib/validate'
-import { arcUsdcBalance, connectArc, injectedProvider } from '@/lib/wallet'
+import { connectSui, suiUsdcBalance } from '@/lib/wallet'
 
 type View = 'home' | 'move' | 'activity' | 'guide'
 type Step = 'amount' | 'address' | 'review' | 'sending' | 'sent'
@@ -41,8 +41,8 @@ const NAV: { id: View; label: string; icon: typeof House }[] = [
 ]
 
 const PATH = [
-  { title: 'Arc', body: 'USDC leaves the Arc wallet.' },
-  { title: 'Circle', body: 'Burns it on Arc.' },
+  { title: 'Sui', body: 'USDC leaves the Sui wallet.' },
+  { title: 'Circle', body: 'Burns it on Sui.' },
   { title: 'Ethereum', body: 'Mints USDC at the SoFi address.' },
   { title: 'SoFi', body: 'Credits the deposit in SoFi Crypto.' },
 ]
@@ -52,7 +52,7 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'back'] as 
 export function PayApp() {
   const [view, setView] = useState<View>('home')
   const [step, setStep] = useState<Step>('amount')
-  const [account, setAccount] = useState<Address | null>(null)
+  const [account, setAccount] = useState<string | null>(null)
   const [balance, setBalance] = useState<string | null>(null)
   const [amount, setAmount] = useState('')
   const [recipient, setRecipient] = useState('')
@@ -66,7 +66,7 @@ export function PayApp() {
   }, [])
 
   const pendingIds = receipts
-    .filter((item) => item.status === 'pending' && /^0x[0-9a-fA-F]{64}$/.test(item.id))
+    .filter((item) => item.status === 'pending' && irisDomain(item.id) != null)
     .map((item) => item.id)
     .join(',')
 
@@ -117,18 +117,9 @@ export function PayApp() {
     setStep('sent')
     setBusy(false)
     if (account) {
-      arcUsdcBalance(account).then(setBalance).catch(() => undefined)
-    }
-  }
-
-  function markDeposited(id: string) {
-    setReceipts((current) => {
-      const next = current.map((item) => (item.id === id ? { ...item, status: 'deposited' as const } : item))
-      saveReceipts(next)
-      return next
-    })
-    if (account) {
-      arcUsdcBalance(account).then(setBalance).catch(() => undefined)
+      suiUsdcBalance(account)
+        .then((next) => setBalance(next.balance))
+        .catch(() => undefined)
     }
   }
 
@@ -140,16 +131,15 @@ export function PayApp() {
 
   async function connect() {
     setError('')
-    const provider = injectedProvider()
-    if (!provider) {
-      setError('Open PayFi in a browser with a wallet extension.')
-      return
-    }
     setBusy(true)
     try {
-      const address = await connectArc(provider)
+      const address = await connectSui()
+      const next = await suiUsdcBalance(address)
       setAccount(address)
-      setBalance(await arcUsdcBalance(address))
+      setBalance(next.balance)
+      if (next.balance === '0' && next.coins !== '0') {
+        setError('This wallet still holds USDC as coins. PayFi spends the Sui address balance.')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not connect.')
     } finally {
@@ -164,7 +154,7 @@ export function PayApp() {
           <Mark className="size-8 text-accent" />
           <div>
             <p className="text-base font-medium tracking-tight text-ink">PayFi</p>
-            <p className="text-xs text-muted">Arc to SoFi</p>
+            <p className="text-xs text-muted">Sui to SoFi</p>
           </div>
         </div>
         <nav className="mt-8 flex flex-col gap-1" aria-label="Primary">
@@ -187,14 +177,14 @@ export function PayApp() {
           })}
         </nav>
         <p className="mt-auto px-3 text-xs leading-relaxed text-faint">
-          A move uses your Arc wallet. Circle mints Ethereum USDC at the SoFi address.
+          A move uses your Sui wallet. Circle mints Ethereum USDC at the SoFi address.
         </p>
       </aside>
 
       <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:mx-auto md:max-w-xl md:pb-0">
         {view !== 'move' ? (
           <div className="hidden items-center gap-2 border-b border-line px-10 py-4 md:flex">
-            <p className="text-sm text-muted">USDC from Arc into the Ethereum address SoFi gives you.</p>
+            <p className="text-sm text-muted">USDC from Sui into the Ethereum address SoFi gives you.</p>
           </div>
         ) : null}
 
@@ -242,8 +232,7 @@ export function PayApp() {
             onHome={() => setView('home')}
             onActivity={() => setView('activity')}
             onConnect={connect}
-            onArcSent={remember}
-            onDeposited={markDeposited}
+            onSent={remember}
             onError={setError}
             onBusy={setBusy}
           />
@@ -293,7 +282,7 @@ function Home({
   onActivity,
 }: {
   balance: string | null
-  account: Address | null
+  account: string | null
   receipts: Receipt[]
   error: string
   busy: boolean
@@ -306,7 +295,7 @@ function Home({
     <div className="safe-x flex flex-col gap-5 pb-6 pt-4 md:px-10 md:pt-10">
       <header className="flex items-end justify-between gap-3 pt-2">
         <div>
-          <p className="text-sm font-medium text-muted">Available on Arc</p>
+          <p className="text-sm font-medium text-muted">Available on Sui</p>
           <p className="hero-num mt-2 text-ink">{balance == null ? '0.00' : formatMoney(balance)}</p>
           <p className="mt-2 text-sm font-medium text-accent">USDC</p>
         </div>
@@ -320,7 +309,7 @@ function Home({
         disabled={busy}
         className="press flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent text-base font-medium text-on-accent disabled:opacity-40"
       >
-        {account ? 'Move to SoFi' : 'Connect Arc'}
+        {account ? 'Move to SoFi' : 'Connect Sui'}
         <ArrowUpRight className="size-4" aria-hidden="true" />
       </button>
       {error ? <p className="text-sm text-bad">{error}</p> : null}
@@ -368,8 +357,8 @@ function Home({
         )}
       </section>
       <p className="px-1 text-sm leading-relaxed text-muted">
-        SoFi receives the amount you enter. PayFi adds the live Circle bridge fee, your Arc wallet pays
-        both, and Circle takes the fee out on Ethereum, plus a little Arc gas. A wrong address cannot
+        SoFi receives the amount you enter. PayFi adds the live Circle bridge fee, your Sui wallet pays
+        both, and Circle takes the fee out on Ethereum, plus a little SUI for gas. A wrong address cannot
         be reversed.
       </p>
     </div>
@@ -392,7 +381,7 @@ function Activity({ receipts, onMove }: { receipts: Receipt[]; onMove: () => voi
         <div className="panel mt-6 px-4 py-8 text-center">
           <p className="text-base font-medium text-ink">No moves yet</p>
           <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-muted">
-            A send shows up here as soon as it leaves your Arc wallet.
+            A send shows up here as soon as it leaves your Sui wallet.
           </p>
           <button
             type="button"
@@ -439,14 +428,14 @@ function Guide({ onMove }: { onMove: () => void }) {
     { title: 'Copy the address in SoFi', body: 'Open Crypto, then Transfer, then Receive, and choose USDC.' },
     { title: 'Check the network', body: 'It must say Ethereum. PayFi always sends to Ethereum USDC.' },
     {
-      title: 'Send from Arc',
-      body: 'Circle burns USDC on Arc and mints Ethereum USDC at that address. SoFi credits it in SoFi Crypto.',
+      title: 'Send from Sui',
+      body: 'Circle burns USDC on Sui and mints Ethereum USDC at that address. SoFi credits it in SoFi Crypto.',
     },
   ]
   const rows = [
     ['SoFi receives', 'The amount you enter'],
-    ['Circle bridge fee', 'Added from your Arc balance'],
-    ['You also pay', 'A little Arc gas'],
+    ['Circle bridge fee', 'Added from your Sui balance'],
+    ['You also pay', 'A little SUI for gas'],
     ['Per move', 'Up to 25,000 USDC'],
     ['Network', 'Ethereum only'],
     ['Reversal', 'Not possible'],
@@ -456,7 +445,7 @@ function Guide({ onMove }: { onMove: () => void }) {
       <header className="pt-2">
         <h1 className="text-2xl font-medium tracking-tight text-ink">Before you move</h1>
         <p className="mt-2 max-w-md text-sm leading-relaxed text-muted">
-          PayFi is the rail from an Arc USDC balance into the Ethereum address SoFi shows you.
+          PayFi is the rail from a Sui USDC balance into the Ethereum address SoFi shows you.
         </p>
       </header>
       <ol className="panel">
@@ -493,7 +482,7 @@ async function loadBridgeFee(amount: string): Promise<string | null> {
 }
 
 function Move(props: {
-  account: Address | null
+  account: string | null
   balance: string | null
   amount: string
   recipient: string
@@ -508,8 +497,7 @@ function Move(props: {
   onHome: () => void
   onActivity: () => void
   onConnect: () => void
-  onArcSent: (receipt: Receipt) => void
-  onDeposited: (id: string) => void
+  onSent: (receipt: Receipt) => void
   onError: (message: string) => void
   onBusy: (value: boolean) => void
 }) {
@@ -518,9 +506,9 @@ function Move(props: {
   const [feeState, setFeeState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const balanceValue = props.balance ?? '0'
   const problem = !props.account
-    ? 'Connect an Arc wallet first.'
+    ? 'Connect a Sui wallet first.'
     : amountError(props.amount) ||
-      (toUnits(props.amount) > toUnits(balanceValue) ? 'That is more than the Arc balance.' : null)
+      (toUnits(props.amount) > toUnits(balanceValue) ? 'That is more than the Sui balance.' : null)
   const destination = sofiAddressError(props.recipient)
   const title =
     props.step === 'amount'
@@ -541,7 +529,7 @@ function Move(props: {
       : paid && amountError(paid)
         ? amountError(paid)
         : paid && props.balance != null && toUnits(paid) > toUnits(props.balance)
-          ? 'The bridge fee makes this more than the Arc balance.'
+          ? 'The bridge fee makes this more than the Sui balance.'
           : null
 
   useEffect(() => {
@@ -587,14 +575,9 @@ function Move(props: {
       return
     }
     if (props.step !== 'review' || !props.account || !fee || reviewProblem) return
-    const provider = injectedProvider()
-    if (!provider) {
-      props.onError('Open PayFi in a browser with a wallet extension.')
-      return
-    }
     props.onError('')
     props.onBusy(true)
-    let arcTx: string | null = null
+    let burned: string | null = null
     try {
       const fresh = await loadBridgeFee(props.amount)
       if (!fresh) {
@@ -609,37 +592,37 @@ function Move(props: {
         return
       }
       props.onStep('sending')
-      const receiptFor = (txHash: string): Receipt => ({
-        id: txHash,
-        amount: props.amount,
-        fee,
-        recipient: props.recipient.trim(),
-        at: Date.now(),
-        status: 'pending',
-        links: [],
-      })
-      const result = await sendArcUsdcToSofi({
-        provider,
+      const digest = await sendSuiUsdcToSofi({
+        address: props.account,
         recipient: props.recipient,
         amount: props.amount,
         fee,
-        onArcSent: (txHash) => {
-          arcTx = txHash
-          props.onArcSent(receiptFor(txHash))
+        onSent: (txHash) => {
+          burned = txHash
+          props.onSent({
+            id: txHash,
+            amount: props.amount,
+            fee,
+            recipient: props.recipient.trim(),
+            at: Date.now(),
+            status: 'pending',
+            links: [],
+          })
         },
       })
-      const burned = arcTx ?? result.steps.find((step) => step.name === 'burn' && step.txHash)?.txHash ?? null
-      if (burned && !arcTx) props.onArcSent(receiptFor(burned))
-      if (burned && result.state === 'success') {
-        props.onDeposited(burned)
-        return
-      }
       if (!burned) {
-        props.onStep('review')
-        props.onError('The send did not go through.')
+        props.onSent({
+          id: digest,
+          amount: props.amount,
+          fee,
+          recipient: props.recipient.trim(),
+          at: Date.now(),
+          status: 'pending',
+          links: [],
+        })
       }
     } catch (err) {
-      if (!arcTx) {
+      if (!burned) {
         props.onStep('review')
         props.onError(err instanceof Error ? err.message : 'The send failed.')
       }
@@ -675,7 +658,7 @@ function Move(props: {
           <div className="pt-4">
             {!props.account ? (
               <button type="button" onClick={props.onConnect} className="press mb-4 h-11 w-full rounded-xl bg-tint text-sm font-medium text-accent">
-                Connect Arc to see your balance
+                Connect Sui to see your balance
               </button>
             ) : null}
             <p className="text-center text-sm text-muted">USDC to SoFi</p>
@@ -731,7 +714,7 @@ function Move(props: {
               <Row label="You pay" value={paid ? `${formatExact(paid)} USDC` : '—'} />
             </dl>
             <p className="px-1 text-sm leading-relaxed text-muted">
-              Circle burns what you pay on Arc and mints the amount above on Ethereum. The bridge fee is the
+              Circle burns what you pay on Sui and mints the amount above on Ethereum. The bridge fee is the
               difference, taken out on Ethereum. A wrong address cannot be reversed.
             </p>
             {reviewProblem ? <p className="text-sm text-bad">{reviewProblem}</p> : null}
