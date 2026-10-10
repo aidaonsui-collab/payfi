@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Eye, EyeOff, Smartphone } from 'lucide-react'
+import { AppLogo } from '@/components/AppLogo'
 import { Sheet } from '@/components/Sheet'
 import { DESTINATIONS, SUI_CCTP_DOMAIN, SUI_EXPLORER, type DestinationId } from '@/lib/chains'
 import { dayLabel, formatExact, formatMoney, formatWhen, shortAddress } from '@/lib/format'
@@ -131,13 +132,8 @@ export function HomeView({
                     onClick={() => onSendAgain(item.recipient, item.destination)}
                     className="press flex w-full flex-col items-center gap-2"
                   >
-                    <span className="flex size-14 items-center justify-center rounded-full bg-accent text-sm font-semibold text-on-accent">
-                      {item.recipient.replace(/^0x/i, '').slice(-2).toUpperCase()}
-                    </span>
-                    <span className="w-full text-center">
-                      <span className="block truncate text-xs text-ink">{shortAddress(item.recipient)}</span>
-                      <span className="block truncate text-xs text-faint">{DESTINATIONS[item.destination].name}</span>
-                    </span>
+                    <AppLogo to={DESTINATIONS[item.destination]} alt={DESTINATIONS[item.destination].name} className="size-14" />
+                    <span className="w-full truncate text-center text-xs text-ink">{shortAddress(item.recipient)}</span>
                   </button>
                 </li>
               ))}
@@ -211,7 +207,7 @@ function ReceiptRow({ item }: { item: Receipt }) {
   const to = DESTINATIONS[item.destination]
   return (
     <span className="flex items-center gap-3 py-3">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-tint text-xs font-semibold text-accent">{to.initials}</span>
+      <AppLogo to={to} className="size-10" />
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-semibold text-ink">{to.account}</span>
         <span className="mt-0.5 block truncate text-sm text-muted">
@@ -230,7 +226,7 @@ function ReceiptDetail({ item, onClose }: { item: Receipt; onClose: () => void }
   return (
     <Sheet title="Move" onClose={onClose}>
       <div className="flex flex-col items-center pb-2 text-center">
-        <span className="flex size-12 items-center justify-center rounded-full bg-tint text-sm font-semibold text-accent">{to.initials}</span>
+        <AppLogo to={to} className="size-12" />
         <p className="mt-3 text-sm text-muted">To {to.account}</p>
         <p className="num mt-1 text-3xl font-semibold tracking-tight text-ink">−{formatExact(item.amount)}</p>
         <p

@@ -23,7 +23,8 @@ export type Destination = {
   name: string
   /** What the receipt says the USDC went to. */
   account: string
-  initials: string
+  /** Square app-icon tile under public/logos. */
+  logo: string
   /** The one network PayFi mints on for this app. */
   network: string
   domain: number
@@ -41,7 +42,7 @@ export const DESTINATIONS: Record<DestinationId, Destination> = {
     id: 'sofi',
     name: 'SoFi',
     account: 'SoFi Crypto',
-    initials: 'SF',
+    logo: '/logos/sofi.svg',
     network: 'Ethereum',
     domain: ETHEREUM_CCTP_DOMAIN,
     receiveHelp: 'In SoFi: Crypto, Transfer, Receive, USDC. The network must say Ethereum.',
@@ -50,7 +51,7 @@ export const DESTINATIONS: Record<DestinationId, Destination> = {
     id: 'cashapp',
     name: 'Cash App',
     account: 'Cash App',
-    initials: 'CA',
+    logo: '/logos/cash-app.svg',
     network: 'Arbitrum',
     domain: ARBITRUM_CCTP_DOMAIN,
     receiveHelp: 'In Cash App, open the USDC deposit screen and pick Arbitrum as the payment network.',

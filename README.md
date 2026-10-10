@@ -16,3 +16,7 @@ npm run dev
 ```
 
 Open http://localhost:3030.
+
+## Logos
+
+`public/logos/sofi.svg` is the SoFi icon from [selfh.st/icons](https://github.com/selfhst/icons) (CC BY 4.0), set on a white tile. `public/logos/cash-app.svg` is the Cash App icon from [Simple Icons](https://simpleicons.org) (CC0 1.0, traced from https://cash.app/press). SoFi is a trademark of SoFi Technologies, Inc. and Cash App is a trademark of Block, Inc.; PayFi shows them only to name where the USDC goes.

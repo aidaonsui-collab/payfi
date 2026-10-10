@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Check, ChevronLeft, Delete, Lock } from 'lucide-react'
+import { AppLogo } from '@/components/AppLogo'
 import { DESTINATIONS, type Destination, type DestinationId } from '@/lib/chains'
 import {
   addressGroups,
@@ -244,10 +245,13 @@ export function MoveView(props: {
                     role="radio"
                     aria-checked={active}
                     onClick={() => props.onDestination(item.id)}
-                    className={`press flex h-12 flex-col items-center justify-center rounded-full ${active ? 'bg-card shadow-card' : ''}`}
+                    className={`press flex h-12 items-center justify-center gap-2 rounded-full ${active ? 'bg-card shadow-card' : ''}`}
                   >
-                    <span className={`text-sm leading-tight font-semibold ${active ? 'text-ink' : 'text-muted'}`}>{item.name}</span>
-                    <span className="text-xs leading-tight text-faint">{item.network}</span>
+                    <AppLogo to={item} className="size-7" />
+                    <span className="flex flex-col items-start">
+                      <span className={`text-sm leading-tight font-semibold ${active ? 'text-ink' : 'text-muted'}`}>{item.name}</span>
+                      <span className="text-xs leading-tight text-faint">{item.network}</span>
+                    </span>
                   </button>
                 )
               })}
@@ -300,7 +304,7 @@ export function MoveView(props: {
         {props.step === 'review' ? (
           <div className="flex flex-col gap-4 pt-6">
             <div className="text-center">
-              <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-tint text-sm font-semibold text-accent">{to.initials}</span>
+              <AppLogo to={to} className="mx-auto block size-12" />
               <p className="mt-3 text-sm font-medium text-muted">{to.name} receives</p>
               <p className="num mt-1 text-hero font-semibold leading-none tracking-tight text-ink">{formatExact(props.amount)}</p>
               <p className="mt-2 text-sm text-muted">USDC on {to.network}</p>
