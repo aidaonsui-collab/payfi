@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Eye, EyeOff, Smartphone } from 'lucide-react'
 import { Sheet } from '@/components/Sheet'
-import { SUI_CCTP_DOMAIN, SUI_EXPLORER } from '@/lib/chains'
+import { DESTINATIONS, SUI_CCTP_DOMAIN, SUI_EXPLORER, type DestinationId } from '@/lib/chains'
 import { dayLabel, formatExact, formatMoney, formatWhen, shortAddress } from '@/lib/format'
 import { depositLabel, type Receipt } from '@/lib/receipts'
 import { irisDomain } from '@/lib/transfer-id'
@@ -35,14 +35,15 @@ export function HomeView({
   onMove: () => void
   onActivity: () => void
   onGuide: () => void
-  onSendAgain: (address: string) => void
+  onSendAgain: (address: string, to: DestinationId) => void
 }) {
   const recent = receipts.slice(0, 4)
   const again: Receipt[] = []
   const seen = new Set<string>()
   for (const item of receipts) {
-    const key = item.recipient.trim().toLowerCase()
-    if (!key || seen.has(key)) continue
+    const address = item.recipient.trim().toLowerCase()
+    const key = `${item.destination}:${address}`
+    if (!address || seen.has(key)) continue
     seen.add(key)
     again.push(item)
     if (again.length === 5) break
@@ -66,7 +67,7 @@ export function HomeView({
           <p className="num mt-3 text-hero font-semibold leading-none tracking-tight text-ink">{figure}</p>
           <p className="mt-3 text-sm text-muted">Available{account ? ` · ${name ?? shortAddress(account)}` : ' on Sui'}</p>
           <button type="button" onClick={onMove} className="press mt-5 h-10 rounded-full bg-accent px-5 text-sm font-semibold text-on-accent">
-            Move to SoFi
+            Move USDC
           </button>
         </section>
 
@@ -103,7 +104,7 @@ export function HomeView({
             ) : null}
           </div>
           {recent.length === 0 ? (
-            <p className="mt-3 text-sm leading-relaxed text-muted">A SoFi deposit shows up here after you send.</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted">A deposit shows up here after you send.</p>
           ) : (
             <ul className="mt-2 divide-y divide-line">
               {recent.map((item) => (
@@ -124,12 +125,19 @@ export function HomeView({
           ) : (
             <ul className="mt-4 flex gap-4 overflow-x-auto pb-1">
               {again.map((item) => (
-                <li key={item.recipient} className="w-16 shrink-0">
-                  <button type="button" onClick={() => onSendAgain(item.recipient)} className="press flex w-full flex-col items-center gap-2">
+                <li key={`${item.destination}:${item.recipient}`} className="w-16 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onSendAgain(item.recipient, item.destination)}
+                    className="press flex w-full flex-col items-center gap-2"
+                  >
                     <span className="flex size-14 items-center justify-center rounded-full bg-accent text-sm font-semibold text-on-accent">
                       {item.recipient.replace(/^0x/i, '').slice(-2).toUpperCase()}
                     </span>
-                    <span className="w-full truncate text-center text-xs text-ink">{shortAddress(item.recipient)}</span>
+                    <span className="w-full text-center">
+                      <span className="block truncate text-xs text-ink">{shortAddress(item.recipient)}</span>
+                      <span className="block truncate text-xs text-faint">{DESTINATIONS[item.destination].name}</span>
+                    </span>
                   </button>
                 </li>
               ))}
@@ -138,9 +146,9 @@ export function HomeView({
         </section>
 
         <section className="rounded-card bg-nav p-5 text-nav-ink shadow-card">
-          <h2 className="max-w-xs text-3xl font-semibold tracking-tight">USDC, into SoFi</h2>
+          <h2 className="max-w-xs text-3xl font-semibold tracking-tight">USDC, into SoFi or Cash App</h2>
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-nav-ink/80">
-            Circle burns it on Sui and mints Ethereum USDC at the address SoFi shows you.
+            Circle burns it on Sui and mints USDC at the address SoFi or Cash App shows you.
           </p>
           <button type="button" onClick={onGuide} className="press mt-6 h-10 rounded-full bg-card px-4 text-sm font-semibold text-ink">
             Read the guide
@@ -148,7 +156,7 @@ export function HomeView({
         </section>
 
         <p className="text-sm leading-relaxed text-muted">
-          SoFi receives the amount you enter. PayFi adds the live Circle bridge fee. A wrong address cannot be reversed.
+          The app you send to receives the amount you enter. PayFi adds the live Circle bridge fee. A wrong address cannot be reversed.
         </p>
       </div>
     </div>
@@ -173,7 +181,7 @@ export function ActivityView({ receipts, onMove }: { receipts: Receipt[]; onMove
           <p className="text-base font-semibold text-ink">No moves yet</p>
           <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-muted">A send shows up here as soon as it leaves your Sui wallet.</p>
           <button type="button" onClick={onMove} className="btn-primary press mx-auto mt-5 max-w-xs">
-            Move to SoFi
+            Move USDC
           </button>
         </div>
       ) : (
@@ -200,13 +208,14 @@ export function ActivityView({ receipts, onMove }: { receipts: Receipt[]; onMove
 }
 
 function ReceiptRow({ item }: { item: Receipt }) {
+  const to = DESTINATIONS[item.destination]
   return (
     <span className="flex items-center gap-3 py-3">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-tint text-xs font-semibold text-accent">SF</span>
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-tint text-xs font-semibold text-accent">{to.initials}</span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-ink">SoFi Crypto</span>
+        <span className="block text-sm font-semibold text-ink">{to.account}</span>
         <span className="mt-0.5 block truncate text-sm text-muted">
-          <span className={item.status === 'failed' ? 'text-bad' : undefined}>{depositLabel(item.status)}</span> ·{' '}
+          <span className={item.status === 'failed' ? 'text-bad' : undefined}>{depositLabel(item.status, to)}</span> ·{' '}
           {formatWhen(item.at)}
         </span>
       </span>
@@ -216,30 +225,31 @@ function ReceiptRow({ item }: { item: Receipt }) {
 }
 
 function ReceiptDetail({ item, onClose }: { item: Receipt; onClose: () => void }) {
+  const to = DESTINATIONS[item.destination]
   const explorer = irisDomain(item.id) === SUI_CCTP_DOMAIN ? `${SUI_EXPLORER}/${item.id}` : null
   return (
     <Sheet title="Move" onClose={onClose}>
       <div className="flex flex-col items-center pb-2 text-center">
-        <span className="flex size-12 items-center justify-center rounded-full bg-tint text-sm font-semibold text-accent">SF</span>
-        <p className="mt-3 text-sm text-muted">To SoFi Crypto</p>
+        <span className="flex size-12 items-center justify-center rounded-full bg-tint text-sm font-semibold text-accent">{to.initials}</span>
+        <p className="mt-3 text-sm text-muted">To {to.account}</p>
         <p className="num mt-1 text-3xl font-semibold tracking-tight text-ink">−{formatExact(item.amount)}</p>
         <p
           className={`mt-2 text-sm font-medium ${
             item.status === 'deposited' ? 'text-accent' : item.status === 'failed' ? 'text-bad' : 'text-muted'
           }`}
         >
-          {depositLabel(item.status)}
+          {depositLabel(item.status, to)}
         </p>
       </div>
       {item.status === 'failed' ? (
         <p className="mt-2 text-sm leading-relaxed text-muted">
-          Circle burned this USDC but could not mint it on Ethereum. It is not lost: the mint to your SoFi address can
-          still be completed from the burn transaction.
+          Circle burned this USDC but could not mint it on {to.network}. It is not lost: the mint to your {to.name}{' '}
+          address can still be completed from the burn transaction.
         </p>
       ) : null}
       <dl className="mt-4 divide-y divide-line border-t border-line">
         <Detail label="When" value={formatWhen(item.at)} />
-        <Detail label="Network" value="Ethereum" />
+        <Detail label="Network" value={to.network} />
         <Detail label="Address" value={shortAddress(item.recipient)} mono />
         <Detail label="Bridge fee" value={item.fee ? `${formatExact(item.fee)} USDC` : '—'} />
       </dl>
@@ -265,26 +275,29 @@ function Detail({ label, value, mono }: { label: string; value: string; mono?: b
 
 export function GuideView({ onMove }: { onMove: () => void }) {
   const steps = [
-    { title: 'Copy the address in SoFi', body: 'Open Crypto, then Transfer, then Receive, and choose USDC.' },
-    { title: 'Check the network', body: 'It must say Ethereum. PayFi always sends to Ethereum USDC.' },
+    { title: 'Pick SoFi or Cash App', body: 'Choose where the USDC goes before you enter the amount.' },
+    {
+      title: 'Copy the address on the right network',
+      body: `${DESTINATIONS.sofi.receiveHelp} ${DESTINATIONS.cashapp.receiveHelp}`,
+    },
     {
       title: 'Send from Sui',
-      body: 'Circle burns USDC on Sui and mints Ethereum USDC at that address. SoFi credits it in SoFi Crypto.',
+      body: 'Circle burns USDC on Sui and mints USDC at that address on Ethereum for SoFi, or on Arbitrum for Cash App.',
     },
   ]
   const rows = [
-    ['SoFi receives', 'The amount you enter'],
+    ['They receive', 'The amount you enter'],
     ['Circle bridge fee', 'Added from your Sui balance'],
     ['You also pay', 'A little SUI for gas'],
     ['Per move', 'Up to 25,000 USDC'],
-    ['Network', 'Ethereum only'],
+    ['Network', 'Ethereum for SoFi, Arbitrum for Cash App'],
     ['Reversal', 'Not possible'],
   ]
   return (
     <div className="safe-x flex flex-col gap-5 pt-4 pb-8 md:pt-8">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">Before you move</h1>
-        <p className="mt-2 text-sm leading-relaxed text-muted">PayFi is the rail from a Sui USDC balance into the Ethereum address SoFi shows you.</p>
+        <p className="mt-2 text-sm leading-relaxed text-muted">PayFi is the rail from a Sui USDC balance into the address SoFi or Cash App shows you.</p>
       </header>
       <ol className="divide-y divide-line overflow-hidden rounded-card border border-line bg-card">
         {steps.map((item, index) => (
@@ -306,7 +319,7 @@ export function GuideView({ onMove }: { onMove: () => void }) {
         ))}
       </section>
       <button type="button" onClick={onMove} className="btn-primary press">
-        Move to SoFi
+        Move USDC
       </button>
     </div>
   )

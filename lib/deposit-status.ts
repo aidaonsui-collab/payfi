@@ -13,6 +13,6 @@ export function depositStatusFromIris(payload: unknown): DepositStatus {
     return done && typeof row.forwardTxHash === 'string' && row.forwardTxHash.length > 2
   })
   if (confirmed) return 'deposited'
-  // Circle burned the USDC but its relayer gave up on the Ethereum mint.
+  // Circle burned the USDC but its relayer gave up on the destination mint.
   return rows.some((row) => row.forwardState === 'FAILED') ? 'failed' : 'pending'
 }

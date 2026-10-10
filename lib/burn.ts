@@ -1,7 +1,7 @@
 import { Transaction } from '@mysten/sui/transactions'
-import { CCTP, ETHEREUM_CCTP_DOMAIN, FORWARD_HOOK, SUI_USDC_TYPE } from './chains'
+import { CCTP, FORWARD_HOOK, SUI_USDC_TYPE } from './chains'
 
-/** Left-pad an Ethereum address into the 32-byte address CCTP expects on Sui. */
+/** Left-pad an EVM address into the 32-byte address CCTP expects on Sui. */
 export function ethereumAsSuiAddress(evm: string): string {
   const hex = evm.trim().toLowerCase().replace(/^0x/, '')
   if (!/^[0-9a-f]{40}$/.test(hex)) throw new Error('That is not an Ethereum address.')
@@ -11,11 +11,12 @@ export function ethereumAsSuiAddress(evm: string): string {
 /**
  * Burn native Sui USDC and attach Circle's forwarding hook.
  * Destination caller stays the zero address. Circle's forwarder rejects a
- * hook whose receive is locked to another caller, then mints on Ethereum.
+ * hook whose receive is locked to another caller, then mints on the
+ * destination domain (Ethereum or Arbitrum).
  */
 export function buildSuiBurn(
   tx: Transaction,
-  opts: { burnUnits: bigint; feeUnits: bigint; recipient: string },
+  opts: { burnUnits: bigint; feeUnits: bigint; recipient: string; domain: number },
 ) {
   const usdc = SUI_USDC_TYPE
   const [coin] = tx.moveCall({
@@ -29,7 +30,7 @@ export function buildSuiBurn(
     typeArguments: [usdc],
     arguments: [
       coin,
-      tx.pure.u32(ETHEREUM_CCTP_DOMAIN),
+      tx.pure.u32(opts.domain),
       tx.pure.address(ethereumAsSuiAddress(opts.recipient)),
       tx.pure.address('0x0000000000000000000000000000000000000000000000000000000000000000'),
       tx.pure.u256(opts.feeUnits),

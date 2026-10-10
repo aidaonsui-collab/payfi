@@ -1,16 +1,16 @@
 import { getAddress, isAddress } from 'viem'
-import { ARC_USDC, ETHEREUM_USDC } from './chains'
+import { ARBITRUM_USDC, ARC_USDC, ETHEREUM_USDC, type Destination } from './chains'
 
-const BLOCKED = new Set([ARC_USDC.toLowerCase(), ETHEREUM_USDC.toLowerCase()])
+const BLOCKED = new Set([ARC_USDC, ETHEREUM_USDC, ARBITRUM_USDC].map((address) => address.toLowerCase()))
 
-export function sofiAddressError(raw: string): string | null {
+export function recipientAddressError(raw: string, to: Destination): string | null {
   const value = raw.trim()
-  if (!value) return 'Paste the Ethereum address from SoFi.'
-  if (!isAddress(value)) return 'That is not an Ethereum address.'
+  if (!value) return `Paste the ${to.network} address from ${to.name}.`
+  if (!isAddress(value)) return `That is not an ${to.network} address.`
   const address = getAddress(value)
   if (address === '0x0000000000000000000000000000000000000000') return 'That address cannot receive USDC.'
   if (BLOCKED.has(address.toLowerCase())) {
-    return 'That is the USDC token contract. Paste the receive address SoFi shows for your account.'
+    return `That is a USDC token contract. Paste the receive address ${to.name} shows for your account.`
   }
   return null
 }

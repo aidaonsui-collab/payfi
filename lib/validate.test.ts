@@ -1,13 +1,24 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { amountError, sofiAddressError } from './validate'
+import { ARBITRUM_USDC, ARC_USDC, DESTINATIONS, ETHEREUM_USDC } from './chains'
+import { amountError, recipientAddressError } from './validate'
 
-test('rejects a missing or token-contract SoFi address', () => {
-  assert.match(sofiAddressError(''), /Paste/)
-  assert.match(sofiAddressError('not-an-address'), /not an Ethereum/)
-  assert.match(sofiAddressError('0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'), /token contract/)
-  assert.match(sofiAddressError('0x3600000000000000000000000000000000000000'), /token contract/)
-  assert.equal(sofiAddressError('0x26bD491560b5175ee8bD1DA4998Fe260FfC413c9'), null)
+const { sofi, cashapp } = DESTINATIONS
+
+test('a missing or bad address is named for the app and its network', () => {
+  assert.equal(recipientAddressError('', sofi), 'Paste the Ethereum address from SoFi.')
+  assert.equal(recipientAddressError('', cashapp), 'Paste the Arbitrum address from Cash App.')
+  assert.equal(recipientAddressError('not-an-address', sofi), 'That is not an Ethereum address.')
+  assert.equal(recipientAddressError('not-an-address', cashapp), 'That is not an Arbitrum address.')
+})
+
+test('every USDC token contract is refused for either app', () => {
+  for (const token of [ETHEREUM_USDC, ARBITRUM_USDC, ARC_USDC]) {
+    assert.match(recipientAddressError(token, sofi) ?? '', /token contract/)
+    assert.match(recipientAddressError(token.toLowerCase(), cashapp) ?? '', /token contract.*Cash App/)
+  }
+  assert.equal(recipientAddressError('0x26bD491560b5175ee8bD1DA4998Fe260FfC413c9', sofi), null)
+  assert.equal(recipientAddressError('0x26bD491560b5175ee8bD1DA4998Fe260FfC413c9', cashapp), null)
 })
 
 test('rejects empty, tiny, and oversized amounts', () => {

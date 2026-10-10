@@ -1,3 +1,5 @@
+import { isDestinationId, type Destination, type DestinationId } from './chains'
+
 export type DepositStatus = 'pending' | 'deposited' | 'failed'
 
 export type Receipt = {
@@ -5,6 +7,7 @@ export type Receipt = {
   amount: string
   fee: string | null
   recipient: string
+  destination: DestinationId
   at: number
   status: DepositStatus
   links: { name: string; url: string }[]
@@ -12,15 +15,18 @@ export type Receipt = {
 
 const KEY = 'payfi.receipts.v1'
 
-export function depositLabel(status: DepositStatus): string {
-  if (status === 'deposited') return 'Deposited to SoFi'
-  if (status === 'failed') return 'Delivery to SoFi failed'
-  return 'Pending deposit to SoFi'
+export function depositLabel(status: DepositStatus, to: Destination): string {
+  if (status === 'deposited') return `Deposited to ${to.name}`
+  if (status === 'failed') return `Delivery to ${to.name} failed`
+  return `Pending deposit to ${to.name}`
 }
 
-/** The SoFi address of the newest move that reached SoFi, if any. */
-export function lastDepositAddress(receipts: Receipt[]): string | null {
-  const last = receipts.find((item) => item.status === 'deposited' && /^0x[0-9a-fA-F]{40}$/.test(item.recipient))
+/** The address of the newest move that reached this app, if any. */
+export function lastDepositAddress(receipts: Receipt[], destination: DestinationId): string | null {
+  const last = receipts.find(
+    (item) =>
+      item.destination === destination && item.status === 'deposited' && /^0x[0-9a-fA-F]{40}$/.test(item.recipient),
+  )
   return last ? last.recipient : null
 }
 
@@ -47,6 +53,8 @@ export function normalizeReceipt(raw: unknown): Receipt | null {
     amount: item.amount,
     fee: typeof item.fee === 'string' ? item.fee : null,
     recipient: typeof item.recipient === 'string' ? item.recipient : '',
+    // Receipts from before Cash App only ever went to SoFi.
+    destination: isDestinationId(item.destination) ? item.destination : 'sofi',
     at: typeof item.at === 'number' ? item.at : Date.now(),
     status,
     links,
