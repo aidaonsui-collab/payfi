@@ -50,7 +50,7 @@ export function HomeView({
   const figure = hidden ? '••••' : balance == null ? '0.00' : formatMoney(balance)
   return (
     <div className="safe-x grid gap-4 pt-4 pb-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-6 lg:pt-6">
-      <div className="flex flex-col gap-4">
+      <div className="flex min-w-0 flex-col gap-4">
         <section className="rounded-card border border-line bg-card p-5 shadow-card">
           <div className="flex items-start justify-between gap-3">
             <h2 className="text-base font-semibold text-ink">USDC balance</h2>
@@ -116,7 +116,7 @@ export function HomeView({
         </section>
       </div>
 
-      <div className="flex flex-col gap-6">
+      <div className="flex min-w-0 flex-col gap-6">
         <section>
           <h2 className="text-base font-semibold text-ink">Send again</h2>
           {again.length === 0 ? (
