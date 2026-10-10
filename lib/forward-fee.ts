@@ -15,7 +15,7 @@ function asUnits(value: unknown): bigint | null {
 }
 
 /**
- * Circle's destination-paid forwarding cap for Sui → Ethereum.
+ * Circle's destination-paid forwarding cap for Sui → Ethereum or Arbitrum.
  * The burn pins `forwardFee.high` as maxFee. The quote is flat;
  * the CCTP protocol fee on this route is zero.
  */

@@ -7,6 +7,7 @@ import { MoveView, type Step } from '@/components/MoveView'
 import { ActivityView, GuideView, HomeView } from '@/components/PayViews'
 import { Sheet } from '@/components/Sheet'
 import { shortAddress } from '@/lib/format'
+import { DESTINATIONS, type DestinationId } from '@/lib/chains'
 import { lastDepositAddress, loadReceipts, saveReceipts, type DepositStatus, type Receipt } from '@/lib/receipts'
 import { irisDomain } from '@/lib/transfer-id'
 import {
@@ -34,6 +35,7 @@ export function PayApp() {
   const [balance, setBalance] = useState<string | null>(null)
   const [coins, setCoins] = useState<string | null>(null)
   const [amount, setAmount] = useState('')
+  const [destination, setDestination] = useState<DestinationId>('sofi')
   const [recipient, setRecipient] = useState('')
   const [attested, setAttested] = useState(false)
   const [receipts, setReceipts] = useState<Receipt[]>([])
@@ -140,7 +142,8 @@ export function PayApp() {
     })
   }
 
-  function sendAgain(address: string) {
+  function sendAgain(address: string, to: DestinationId) {
+    setDestination(to)
     setRecipient(address)
     setAttested(false)
     setError('')
@@ -193,6 +196,15 @@ export function PayApp() {
         })
         .catch(() => undefined)
     }
+  }
+
+  // An address belongs to one app and network. Switching drops it, so a SoFi
+  // address is never sent on Arbitrum.
+  function changeDestination(to: DestinationId) {
+    if (to === destination) return
+    setDestination(to)
+    setRecipient('')
+    setAttested(false)
   }
 
   function changeRecipient(value: string) {
@@ -270,13 +282,15 @@ export function PayApp() {
             account={account}
             balance={balance}
             amount={amount}
+            to={DESTINATIONS[destination]}
             recipient={recipient}
-            lastAddress={lastDepositAddress(receipts)}
+            lastAddress={lastDepositAddress(receipts, destination)}
             attested={attested}
             step={step}
             busy={busy}
             error={error}
             onAmount={setAmount}
+            onDestination={changeDestination}
             onRecipient={changeRecipient}
             onAttested={setAttested}
             onStep={setStep}

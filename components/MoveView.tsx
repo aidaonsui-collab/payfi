@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { Check, ChevronLeft, Delete, Lock } from 'lucide-react'
+import { AppLogo } from '@/components/AppLogo'
+import { DESTINATIONS, type Destination, type DestinationId } from '@/lib/chains'
 import {
   addressGroups,
   addUsdc,
@@ -13,16 +15,17 @@ import {
   toUnits,
 } from '@/lib/format'
 import type { Receipt } from '@/lib/receipts'
-import { sendSuiUsdcToSofi } from '@/lib/send'
-import { amountError, sofiAddressError } from '@/lib/validate'
+import { sendSuiUsdc } from '@/lib/send'
+import { amountError, recipientAddressError } from '@/lib/validate'
 
 export type Step = 'amount' | 'address' | 'review' | 'sending' | 'sent'
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'back'] as const
 const CHIPS = ['100', '500', '1000'] as const
+const DESTINATION_LIST = Object.values(DESTINATIONS)
 
-async function loadBridgeFee(amount: string): Promise<string | null> {
-  const response = await fetch(`/api/fee?amount=${encodeURIComponent(amount)}`)
+async function loadBridgeFee(amount: string, to: DestinationId): Promise<string | null> {
+  const response = await fetch(`/api/fee?amount=${encodeURIComponent(amount)}&to=${to}`)
   const data = (await response.json()) as { fee?: string }
   if (!response.ok || !data.fee || amountError(data.fee)) return null
   return data.fee
@@ -32,6 +35,7 @@ export function MoveView(props: {
   account: string | null
   balance: string | null
   amount: string
+  to: Destination
   recipient: string
   lastAddress: string | null
   attested: boolean
@@ -39,6 +43,7 @@ export function MoveView(props: {
   busy: boolean
   error: string
   onAmount: (value: string) => void
+  onDestination: (id: DestinationId) => void
   onRecipient: (value: string) => void
   onAttested: (value: boolean) => void
   onStep: (step: Step) => void
@@ -53,6 +58,7 @@ export function MoveView(props: {
   const [fee, setFee] = useState<string | null>(null)
   const [feeState, setFeeState] = useState<'loading' | 'ready' | 'failed'>('loading')
 
+  const to = props.to
   const balanceValue = props.balance ?? '0'
   const typedProblem = amountError(props.amount)
   const overBalance =
@@ -60,14 +66,22 @@ export function MoveView(props: {
       ? 'That is more than the Sui balance.'
       : null
   const problem = typedProblem || overBalance
-  const destination = sofiAddressError(props.recipient)
-  // The last SoFi address when this one differs from it, to warn about a swapped paste.
+  const addressProblem = recipientAddressError(props.recipient, to)
+  // The last address for this app when this one differs from it, to warn about a swapped paste.
   const changedFrom =
-    !destination && props.lastAddress && props.lastAddress.toLowerCase() !== props.recipient.trim().toLowerCase()
+    !addressProblem && props.lastAddress && props.lastAddress.toLowerCase() !== props.recipient.trim().toLowerCase()
       ? props.lastAddress
       : null
   const title =
-    props.step === 'amount' ? 'Amount' : props.step === 'address' ? 'SoFi address' : props.step === 'review' ? 'Review' : props.step === 'sending' ? 'Sending' : 'Sent'
+    props.step === 'amount'
+      ? 'Amount'
+      : props.step === 'address'
+        ? `${to.name} address`
+        : props.step === 'review'
+          ? 'Review'
+          : props.step === 'sending'
+            ? 'Sending'
+            : 'Sent'
   const progress = props.step === 'amount' ? 1 : props.step === 'address' ? 2 : 3
   const index = props.step === 'amount' ? '1 of 3' : props.step === 'address' ? '2 of 3' : props.step === 'review' ? '3 of 3' : ''
   const paid = fee ? addUsdc(props.amount, fee) : null
@@ -98,7 +112,7 @@ export function MoveView(props: {
     let cancelled = false
     setFee(null)
     setFeeState('loading')
-    loadBridgeFee(props.amount)
+    loadBridgeFee(props.amount, to.id)
       .then((next) => {
         if (cancelled) return
         if (!next) {
@@ -114,7 +128,7 @@ export function MoveView(props: {
     return () => {
       cancelled = true
     }
-  }, [props.step, props.amount])
+  }, [props.step, props.amount, to.id])
 
   function goBack() {
     if (props.step === 'sending' || props.step === 'sent') return
@@ -131,7 +145,7 @@ export function MoveView(props: {
     }
     if (props.step === 'address') {
       setTried(true)
-      if (destination || !props.attested) return
+      if (addressProblem || !props.attested) return
       props.onStep('review')
       return
     }
@@ -143,8 +157,18 @@ export function MoveView(props: {
     props.onError('')
     props.onBusy(true)
     let burned: string | null = null
+    const receiptFor = (id: string): Receipt => ({
+      id,
+      amount: props.amount,
+      fee,
+      recipient: props.recipient.trim(),
+      destination: to.id,
+      at: Date.now(),
+      status: 'pending',
+      links: [],
+    })
     try {
-      const fresh = await loadBridgeFee(props.amount)
+      const fresh = await loadBridgeFee(props.amount, to.id)
       if (!fresh) {
         setFeeState('failed')
         props.onError('Circle did not quote a bridge fee.')
@@ -157,35 +181,18 @@ export function MoveView(props: {
         return
       }
       props.onStep('sending')
-      const digest = await sendSuiUsdcToSofi({
+      const digest = await sendSuiUsdc({
         address: props.account,
+        to,
         recipient: props.recipient,
         amount: props.amount,
         fee,
         onSent: (txHash) => {
           burned = txHash
-          props.onSent({
-            id: txHash,
-            amount: props.amount,
-            fee,
-            recipient: props.recipient.trim(),
-            at: Date.now(),
-            status: 'pending',
-            links: [],
-          })
+          props.onSent(receiptFor(txHash))
         },
       })
-      if (!burned) {
-        props.onSent({
-          id: digest,
-          amount: props.amount,
-          fee,
-          recipient: props.recipient.trim(),
-          at: Date.now(),
-          status: 'pending',
-          links: [],
-        })
-      }
+      if (!burned) props.onSent(receiptFor(digest))
     } catch (err) {
       if (!burned) {
         props.onStep('review')
@@ -200,7 +207,7 @@ export function MoveView(props: {
   const continueDisabled =
     props.busy ||
     (props.step === 'amount' && !!problem) ||
-    (props.step === 'address' && (!!destination || !props.attested)) ||
+    (props.step === 'address' && (!!addressProblem || !props.attested)) ||
     (props.step === 'review' && !!props.account && (feeState !== 'ready' || !!reviewProblem))
   const continueLabel = props.busy ? 'Sending…' : props.step === 'review' ? (props.account ? 'Send' : 'Connect wallet') : props.step === 'sent' ? 'Done' : 'Continue'
 
@@ -227,9 +234,29 @@ export function MoveView(props: {
 
       <div className="safe-x min-h-0 flex-1 overflow-y-auto">
         {props.step === 'amount' ? (
-          <div className="pt-8">
-            <p className="text-center text-sm font-medium text-muted">To SoFi</p>
-            <p className="mt-3 flex items-baseline justify-center gap-2">
+          <div className="pt-6">
+            <div role="radiogroup" aria-label="Send to" className="mx-auto grid max-w-xs grid-cols-2 gap-1 rounded-full bg-fill p-1">
+              {DESTINATION_LIST.map((item) => {
+                const active = item.id === to.id
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => props.onDestination(item.id)}
+                    className={`press flex h-12 items-center justify-center gap-2 rounded-full ${active ? 'bg-card shadow-card' : ''}`}
+                  >
+                    <AppLogo to={item} className="size-7" />
+                    <span className="flex flex-col items-start">
+                      <span className={`text-sm leading-tight font-semibold ${active ? 'text-ink' : 'text-muted'}`}>{item.name}</span>
+                      <span className="text-xs leading-tight text-faint">{item.network}</span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-5 flex items-baseline justify-center gap-2">
               <span className={`num text-hero font-semibold leading-none tracking-tight ${props.amount ? 'text-ink' : 'text-faint'}`}>{formatTyping(props.amount)}</span>
               <span className="text-lg font-medium text-muted">USDC</span>
             </p>
@@ -260,9 +287,10 @@ export function MoveView(props: {
 
         {props.step === 'address' ? (
           <AddressStep
+            to={to}
             recipient={props.recipient}
             attested={props.attested}
-            destination={destination}
+            addressProblem={addressProblem}
             changedFrom={changedFrom}
             tried={tried}
             onRecipient={(value) => {
@@ -276,31 +304,31 @@ export function MoveView(props: {
         {props.step === 'review' ? (
           <div className="flex flex-col gap-4 pt-6">
             <div className="text-center">
-              <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-tint text-sm font-semibold text-accent">SF</span>
-              <p className="mt-3 text-sm font-medium text-muted">SoFi receives</p>
+              <AppLogo to={to} className="mx-auto block size-12" />
+              <p className="mt-3 text-sm font-medium text-muted">{to.name} receives</p>
               <p className="num mt-1 text-hero font-semibold leading-none tracking-tight text-ink">{formatExact(props.amount)}</p>
-              <p className="mt-2 text-sm text-muted">USDC on Ethereum</p>
+              <p className="mt-2 text-sm text-muted">USDC on {to.network}</p>
             </div>
             <dl className="divide-y divide-line overflow-hidden rounded-card border border-line">
-              <Row label="To" value="SoFi Crypto" />
-              <Row label="Network" value="Ethereum" />
+              <Row label="To" value={to.account} />
+              <Row label="Network" value={to.network} />
               <div className="px-4 py-3">
-                <dt className="text-sm text-muted">SoFi address</dt>
+                <dt className="text-sm text-muted">{to.name} address</dt>
                 <dd className="mt-2">
                   <div className="grid grid-cols-[repeat(5,max-content)] gap-x-2 gap-y-1 font-mono text-base font-medium text-ink">
                     {addressGroups(props.recipient).map((group, i) => (
                       <span key={i}>{group}</span>
                     ))}
                   </div>
-                  <div className="mt-2 text-xs text-muted">Check every group against the address in SoFi.</div>
+                  <div className="mt-2 text-xs text-muted">Check every group against the address in {to.name}.</div>
                 </dd>
               </div>
               <Row label="Bridge fee" value={fee ? `${formatExact(fee)} USDC` : feeState === 'failed' ? 'Unavailable' : 'Getting the fee'} />
               <Row label="You pay" value={paid ? `${formatExact(paid)} USDC` : '—'} />
             </dl>
-            {changedFrom ? <NewAddressNote last={changedFrom} /> : null}
+            {changedFrom ? <NewAddressNote to={to} last={changedFrom} /> : null}
             <p className="text-sm leading-relaxed text-muted">
-              Your wallet signs the burn. PayFi never holds the USDC. Circle mints the amount above on Ethereum and takes the bridge fee there. A wrong address cannot be reversed.
+              Your wallet signs the burn. PayFi never holds the USDC. Circle mints the amount above on {to.network} and takes the bridge fee there. A wrong address cannot be reversed.
             </p>
             {reviewProblem ? <p className="text-sm text-bad" role="alert">{reviewProblem}</p> : null}
             {props.error ? <p className="text-sm text-bad" role="alert">{props.error}</p> : null}
@@ -323,7 +351,7 @@ export function MoveView(props: {
             </svg>
             <p className="mt-6 text-2xl font-semibold tracking-tight text-ink">Sent</p>
             <p className="num mt-2 text-hero font-semibold leading-none tracking-tight text-ink">{formatExact(props.amount)}</p>
-            <p className="mt-3 text-sm text-muted">USDC · pending deposit to SoFi</p>
+            <p className="mt-3 text-sm text-muted">USDC · pending deposit to {to.name}</p>
           </div>
         ) : null}
       </div>
@@ -349,17 +377,19 @@ export function MoveView(props: {
 }
 
 function AddressStep({
+  to,
   recipient,
   attested,
-  destination,
+  addressProblem,
   changedFrom,
   tried,
   onRecipient,
   onAttest,
 }: {
+  to: Destination
   recipient: string
   attested: boolean
-  destination: string | null
+  addressProblem: string | null
   changedFrom: string | null
   tried: boolean
   onRecipient: (value: string) => void
@@ -369,10 +399,10 @@ function AddressStep({
     <div className="flex flex-col gap-4 pt-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <label htmlFor="sofi-address" className="text-sm font-semibold text-ink">
-            Ethereum address
+          <label htmlFor="recipient-address" className="text-sm font-semibold text-ink">
+            {to.network} address
           </label>
-          <p className="mt-1 text-sm leading-relaxed text-muted">In SoFi: Crypto, Transfer, Receive, USDC. The network must say Ethereum.</p>
+          <p className="mt-1 text-sm leading-relaxed text-muted">{to.receiveHelp}</p>
         </div>
         <button
           type="button"
@@ -389,7 +419,7 @@ function AddressStep({
         </button>
       </div>
       <textarea
-        id="sofi-address"
+        id="recipient-address"
         value={recipient}
         onChange={(event) => onRecipient(event.target.value)}
         placeholder="0x"
@@ -403,10 +433,10 @@ function AddressStep({
         <span className="text-sm text-muted">Network</span>
         <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
           <Lock className="size-3.5" aria-hidden="true" />
-          Ethereum
+          {to.network}
         </span>
       </div>
-      {changedFrom ? <NewAddressNote last={changedFrom} /> : null}
+      {changedFrom ? <NewAddressNote to={to} last={changedFrom} /> : null}
       <button
         type="button"
         role="checkbox"
@@ -417,20 +447,22 @@ function AddressStep({
         <span className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border ${attested ? 'border-accent bg-accent text-on-accent' : 'border-line bg-card text-transparent'}`} aria-hidden="true">
           <Check className="size-3.5" />
         </span>
-        <span className="text-sm leading-relaxed text-ink">This is the Ethereum address SoFi shows for my USDC deposit.</span>
+        <span className="text-sm leading-relaxed text-ink">
+          This is the {to.network} address {to.name} shows for my USDC deposit.
+        </span>
       </button>
       <p className="min-h-5 text-sm text-bad" role="alert">
-        {destination && recipient.trim() ? destination : tried && !attested ? 'Confirm the SoFi network is Ethereum.' : ''}
+        {addressProblem && recipient.trim() ? addressProblem : tried && !attested ? `Confirm the ${to.name} network is ${to.network}.` : ''}
       </p>
     </div>
   )
 }
 
-function NewAddressNote({ last }: { last: string }) {
+function NewAddressNote({ to, last }: { to: Destination; last: string }) {
   return (
     <p className="text-sm leading-relaxed text-bad">
-      This is not the address your last SoFi deposit went to (<span className="font-mono">{shortAddress(last)}</span>).
-      Check it against SoFi before you send.
+      This is not the address your last {to.name} deposit went to (<span className="font-mono">{shortAddress(last)}</span>).
+      Check it against {to.name} before you send.
     </p>
   )
 }

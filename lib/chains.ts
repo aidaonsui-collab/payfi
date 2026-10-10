@@ -1,5 +1,6 @@
 export const ETHEREUM_USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' as const
-/** Still rejected as a SoFi receive address. */
+export const ARBITRUM_USDC = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as const
+/** Still rejected as a receive address. */
 export const ARC_USDC = '0x3600000000000000000000000000000000000000' as const
 
 export const SUI_USDC_TYPE =
@@ -11,11 +12,61 @@ export const SUI_EXPLORER = 'https://suiscan.xyz/mainnet/tx'
 /** CCTP domain 8. Fast Transfer does not apply; standard finality is 2000. */
 export const SUI_CCTP_DOMAIN = 8
 export const ETHEREUM_CCTP_DOMAIN = 0
+export const ARBITRUM_CCTP_DOMAIN = 3
 /** Earlier PayFi burns. Pending receipts from that path still settle here. */
 export const ARC_CCTP_DOMAIN = 26
 
+export type DestinationId = 'sofi' | 'cashapp'
+
+export type Destination = {
+  id: DestinationId
+  name: string
+  /** What the receipt says the USDC went to. */
+  account: string
+  /** Square app-icon tile under public/logos. */
+  logo: string
+  /** The one network PayFi mints on for this app. */
+  network: string
+  domain: number
+  /** Where the app shows its USDC receive address. */
+  receiveHelp: string
+}
+
+/**
+ * SoFi credits USDC on Ethereum only. Cash App takes the same EVM address on
+ * Ethereum, Polygon and Arbitrum; Arbitrum is used because Circle's relayer
+ * pays far less gas to mint there, so the bridge fee is smaller.
+ */
+export const DESTINATIONS: Record<DestinationId, Destination> = {
+  sofi: {
+    id: 'sofi',
+    name: 'SoFi',
+    account: 'SoFi Crypto',
+    logo: '/logos/sofi.svg',
+    network: 'Ethereum',
+    domain: ETHEREUM_CCTP_DOMAIN,
+    receiveHelp: 'In SoFi: Crypto, Transfer, Receive, USDC. The network must say Ethereum.',
+  },
+  cashapp: {
+    id: 'cashapp',
+    name: 'Cash App',
+    account: 'Cash App',
+    logo: '/logos/cash-app.svg',
+    network: 'Arbitrum',
+    domain: ARBITRUM_CCTP_DOMAIN,
+    receiveHelp: 'In Cash App, open the USDC deposit screen and pick Arbitrum as the payment network.',
+  },
+}
+
+export function isDestinationId(value: unknown): value is DestinationId {
+  return typeof value === 'string' && Object.hasOwn(DESTINATIONS, value)
+}
+
 export const IRIS = 'https://iris-api.circle.com'
-export const IRIS_FORWARD_FEE = `${IRIS}/v2/burn/USDC/fees/${SUI_CCTP_DOMAIN}/${ETHEREUM_CCTP_DOMAIN}?forward=true`
+
+export function irisForwardFeeUrl(destinationDomain: number): string {
+  return `${IRIS}/v2/burn/USDC/fees/${SUI_CCTP_DOMAIN}/${destinationDomain}?forward=true`
+}
 
 export function irisMessagesUrl(domain: number, tx: string): string {
   return `${IRIS}/v2/messages/${domain}?transactionHash=${encodeURIComponent(tx)}`
@@ -23,8 +74,8 @@ export function irisMessagesUrl(domain: number, tx: string): string {
 
 /**
  * Mainnet CCTP V2 packages. `deposit_for_burn` takes hook bytes, so the
- * version-0 `cctp-forward` hook can ask Circle to mint on Ethereum.
- * Sui is not a forwarding destination. Ethereum is.
+ * version-0 `cctp-forward` hook can ask Circle to mint on Ethereum or Arbitrum.
+ * Sui is not a forwarding destination; both of those are.
  */
 export const CCTP = {
   tmmPackage: '0xeb14978abfe93a37c5d5bf86a0623b923553a5f0e794daac7724f1e2fdbfb830',

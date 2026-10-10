@@ -7,7 +7,7 @@ const plex = IBM_Plex_Mono({ subsets: ['latin'], weight: ['400', '500'], variabl
 
 export const metadata: Metadata = {
   title: 'PayFi',
-  description: 'Send Sui USDC to a SoFi Ethereum USDC address.',
+  description: 'Send Sui USDC to SoFi or Cash App.',
 }
 
 const themeScript = `try{if(localStorage.getItem('payfi.theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}`
